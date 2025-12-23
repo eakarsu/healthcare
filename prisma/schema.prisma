@@ -1,0 +1,2416 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ PRACTICE & USERS ============
+
+model Practice {
+  id            String    @id @default(cuid())
+  name          String
+  npi           String?   // National Provider Identifier
+  taxId         String?   // Encrypted
+  specialty     Specialty
+  phone         String?
+  fax           String?
+  email         String?
+  website       String?
+  logo          String?
+  timezone      String    @default("America/New_York")
+
+  // Address
+  address       String?
+  city          String?
+  state         String?
+  zip           String?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  locations     Location[]
+  users         User[]
+  providers     Provider[]
+  patients      Patient[]
+  services      Service[]
+  feeSchedules  FeeSchedule[]
+  insurancePlans InsurancePlan[]
+  baaAgreements BAAgreement[]
+
+  // New feature relations
+  onlineBookingSettings OnlineBookingSettings?
+  fhirConnections       FHIRConnection[]
+  intakeForms           IntakeForm[]
+}
+
+enum Specialty {
+  DENTAL
+  PHYSICAL_THERAPY
+  CHIROPRACTIC
+  URGENT_CARE
+  PRIMARY_CARE
+  DERMATOLOGY
+  ORTHOPEDIC
+  OTHER
+}
+
+model Location {
+  id            String    @id @default(cuid())
+  name          String
+  address       String
+  city          String
+  state         String
+  zip           String
+  phone         String?
+  fax           String?
+  email         String?
+  isActive      Boolean   @default(true)
+
+  // Operating hours (JSON)
+  operatingHours Json?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  practice      Practice  @relation(fields: [practiceId], references: [id])
+  practiceId    String
+  appointments  Appointment[]
+  providers     ProviderLocation[]
+  rooms         Room[]
+
+  // New feature relations
+  onlineBookings OnlineBooking[]
+  kioskDevices   KioskDevice[]
+}
+
+model Room {
+  id            String    @id @default(cuid())
+  name          String
+  type          String    // Exam, Treatment, Surgery, etc.
+  capacity      Int       @default(1)
+  equipment     String[]
+  isActive      Boolean   @default(true)
+
+  location      Location  @relation(fields: [locationId], references: [id])
+  locationId    String
+  appointments  Appointment[]
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  firstName     String
+  lastName      String
+  role          UserRole
+  phone         String?
+  avatar        String?
+  isActive      Boolean   @default(true)
+
+  // 2FA
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret String?
+
+  // Session management
+  lastLogin     DateTime?
+  lastActivity  DateTime?
+  failedLogins  Int       @default(0)
+  lockedUntil   DateTime?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  practice      Practice  @relation(fields: [practiceId], references: [id])
+  practiceId    String
+  provider      Provider?
+  auditLogs     AuditLog[]
+}
+
+enum UserRole {
+  ADMIN
+  PROVIDER
+  NURSE
+  RECEPTIONIST
+  BILLER
+  MANAGER
+}
+
+model Provider {
+  id            String    @id @default(cuid())
+  npi           String?
+  licenseNumber String?
+  licenseState  String?
+  specialty     String
+  title         String?   // MD, DO, DDS, PT, DC, etc.
+  color         String?   // For calendar
+
+  // Credentials
+  credentials   String[]  // MD, FACP, etc.
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user          User      @relation(fields: [userId], references: [id])
+  userId        String    @unique
+  practice      Practice  @relation(fields: [practiceId], references: [id])
+  practiceId    String
+  locations     ProviderLocation[]
+  schedules     ProviderSchedule[]
+  appointments  Appointment[]
+  encounters    Encounter[]
+  claims        Claim[]
+  waitlistEntries WaitlistEntry[]
+
+  // New feature relations
+  ambientSessions     AmbientSession[]
+  priorAuthorizations PriorAuthorization[]
+  onlineBookings      OnlineBooking[]
+  prescriptions       Prescription[]
+  imagingStudies      ImagingStudy[]
+  mentalHealthScreenings MentalHealthScreening[]
+
+  // Production feature relations
+  epcsCredentials     ProviderEPCS?
+}
+
+model ProviderLocation {
+  id          String   @id @default(cuid())
+
+  provider    Provider @relation(fields: [providerId], references: [id])
+  providerId  String
+  location    Location @relation(fields: [locationId], references: [id])
+  locationId  String
+
+  @@unique([providerId, locationId])
+}
+
+model ProviderSchedule {
+  id            String    @id @default(cuid())
+  dayOfWeek     Int       // 0-6 (Sunday-Saturday)
+  startTime     String    // HH:MM format
+  endTime       String
+  slotDuration  Int       @default(30) // minutes
+  isAvailable   Boolean   @default(true)
+
+  provider      Provider  @relation(fields: [providerId], references: [id])
+  providerId    String
+
+  @@unique([providerId, dayOfWeek])
+}
+
+// ============ PATIENTS ============
+
+model Patient {
+  id              String      @id @default(cuid())
+  mrn             String      @unique // Medical Record Number
+  status          PatientStatus @default(ACTIVE)
+
+  // Demographics (PHI - encrypted at rest)
+  firstName       String
+  lastName        String
+  middleName      String?
+  dateOfBirth     DateTime
+  gender          Gender
+  ssn             String?     // Encrypted
+  preferredName   String?
+  pronouns        String?
+
+  // Contact (PHI)
+  email           String?
+  phone           String?
+  mobile          String?
+  address         String?
+  address2        String?
+  city            String?
+  state           String?
+  zip             String?
+  preferredContact String?    @default("phone")
+  preferredLanguage String?   @default("en")
+
+  // Emergency contact
+  emergencyName   String?
+  emergencyPhone  String?
+  emergencyRelation String?
+
+  // Employer
+  employer        String?
+  occupation      String?
+
+  // Referral
+  referralSource  String?
+  referredBy      String?
+
+  // Medical
+  bloodType       String?
+  height          Decimal?    @db.Decimal(5, 2) // inches
+  weight          Decimal?    @db.Decimal(5, 2) // lbs
+
+  // Portal access
+  portalEnabled   Boolean     @default(false)
+  portalEmail     String?
+  portalPassword  String?
+
+  // Stripe integration
+  stripeCustomerId String?
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  practice        Practice    @relation(fields: [practiceId], references: [id])
+  practiceId      String
+  insurances      PatientInsurance[]
+  allergies       Allergy[]
+  medications     Medication[]
+  conditions      Condition[]
+  familyHistory   FamilyHistory[]
+  appointments    Appointment[]
+  encounters      Encounter[]
+  documents       PatientDocument[]
+  claims          Claim[]
+  payments        PatientPayment[]
+  consents        PatientConsent[]
+  communications  PatientCommunication[]
+  balances        PatientBalance[]
+  recalls         Recall[]
+  waitlistEntries WaitlistEntry[]
+
+  // New feature relations
+  ambientSessions     AmbientSession[]
+  priorAuthorizations PriorAuthorization[]
+  onlineBookings      OnlineBooking[]
+  prescriptions       Prescription[]
+  imagingStudies      ImagingStudy[]
+  mentalHealthScreenings MentalHealthScreening[]
+  intakeFormSubmissions IntakeFormSubmission[]
+  chatbotConversations ChatbotConversation[]
+
+  // Production feature relations
+  labOrders           LabOrder[]
+  kioskSessions       KioskSession[]
+  superbills          Superbill[]
+  qualityMeasures     PatientQualityMeasure[]
+  encryptedDocuments  EncryptedDocument[]
+  faxMessages         FaxMessage[]
+}
+
+enum PatientStatus {
+  ACTIVE
+  INACTIVE
+  DECEASED
+  TRANSFERRED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  UNKNOWN
+}
+
+model PatientInsurance {
+  id              String      @id @default(cuid())
+  priority        Int         // 1 = Primary, 2 = Secondary, etc.
+  relationship    String      // Self, Spouse, Child, etc.
+
+  // Subscriber info
+  subscriberName  String
+  subscriberId    String
+  groupNumber     String?
+
+  // Insurance
+  insurancePlan   InsurancePlan @relation(fields: [insurancePlanId], references: [id])
+  insurancePlanId String
+
+  // Eligibility
+  isVerified      Boolean     @default(false)
+  verifiedDate    DateTime?
+  eligibilityData Json?       // Cached eligibility response
+
+  // Effective dates
+  effectiveDate   DateTime?
+  terminationDate DateTime?
+
+  copay           Decimal?    @db.Decimal(10, 2)
+  deductible      Decimal?    @db.Decimal(10, 2)
+  deductibleMet   Decimal?    @db.Decimal(10, 2)
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  patient         Patient     @relation(fields: [patientId], references: [id])
+  patientId       String
+  claims          Claim[]
+
+  // New feature relations
+  priorAuthorizations PriorAuthorization[]
+  eligibilityChecks   EligibilityCheck[]
+
+  @@unique([patientId, priority])
+}
+
+model Allergy {
+  id            String      @id @default(cuid())
+  allergen      String
+  reaction      String?
+  severity      Severity    @default(MODERATE)
+  status        String      @default("active")
+  onsetDate     DateTime?
+  notes         String?
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  patient       Patient     @relation(fields: [patientId], references: [id])
+  patientId     String
+}
+
+enum Severity {
+  MILD
+  MODERATE
+  SEVERE
+  LIFE_THREATENING
+}
+
+model Medication {
+  id            String    @id @default(cuid())
+  name          String
+  dosage        String?
+  frequency     String?
+  route         String?   // Oral, IV, Topical, etc.
+  prescribedBy  String?
+  prescribedDate DateTime?
+  startDate     DateTime?
+  endDate       DateTime?
+  status        String    @default("active")
+  notes         String?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  patient       Patient   @relation(fields: [patientId], references: [id])
+  patientId     String
+}
+
+model Condition {
+  id            String    @id @default(cuid())
+  icdCode       String?   // ICD-10 code
+  name          String
+  status        String    @default("active") // active, resolved, chronic
+  onsetDate     DateTime?
+  resolvedDate  DateTime?
+  notes         String?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  patient       Patient   @relation(fields: [patientId], references: [id])
+  patientId     String
+}
+
+model FamilyHistory {
+  id            String    @id @default(cuid())
+  relationship  String    // Mother, Father, Sibling, etc.
+  condition     String
+  ageAtOnset    Int?
+  notes         String?
+
+  patient       Patient   @relation(fields: [patientId], references: [id])
+  patientId     String
+}
+
+model PatientConsent {
+  id            String      @id @default(cuid())
+  type          ConsentType
+  status        String      @default("signed")
+  signedDate    DateTime    @default(now())
+  expiresDate   DateTime?
+  signatureFile String?
+  ipAddress     String?
+
+  patient       Patient     @relation(fields: [patientId], references: [id])
+  patientId     String
+}
+
+enum ConsentType {
+  HIPAA_NOTICE
+  TREATMENT_CONSENT
+  FINANCIAL_RESPONSIBILITY
+  TELEHEALTH_CONSENT
+  RELEASE_OF_INFORMATION
+  PHOTOGRAPHY_CONSENT
+}
+
+model PatientCommunication {
+  id            String            @id @default(cuid())
+  type          CommunicationType
+  direction     String            // inbound, outbound
+  subject       String?
+  message       String
+  status        String            @default("sent")
+  sentAt        DateTime          @default(now())
+
+  patient       Patient           @relation(fields: [patientId], references: [id])
+  patientId     String
+}
+
+enum CommunicationType {
+  EMAIL
+  SMS
+  PHONE
+  PORTAL_MESSAGE
+  LETTER
+}
+
+// ============ APPOINTMENTS ============
+
+model Appointment {
+  id              String            @id @default(cuid())
+  type            AppointmentType   @relation(fields: [appointmentTypeId], references: [id])
+  appointmentTypeId String
+  status          AppointmentStatus @default(SCHEDULED)
+
+  // Timing
+  scheduledStart  DateTime
+  scheduledEnd    DateTime
+  actualStart     DateTime?
+  actualEnd       DateTime?
+
+  // Check-in
+  checkedInAt     DateTime?
+  checkedOutAt    DateTime?
+
+  // Details
+  chiefComplaint  String?
+  notes           String?
+  isNewPatient    Boolean           @default(false)
+  isRecurring     Boolean           @default(false)
+  recurrenceRule  String?           // RRULE format
+
+  // Reminders
+  reminderSent    Boolean           @default(false)
+  confirmationSent Boolean          @default(false)
+  confirmedAt     DateTime?
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  // Relations
+  patient         Patient           @relation(fields: [patientId], references: [id])
+  patientId       String
+  provider        Provider          @relation(fields: [providerId], references: [id])
+  providerId      String
+  location        Location          @relation(fields: [locationId], references: [id])
+  locationId      String
+  room            Room?             @relation(fields: [roomId], references: [id])
+  roomId          String?
+  encounter       Encounter?
+
+  // New feature relations
+  telehealthSession     TelehealthSession?
+  intakeFormSubmissions IntakeFormSubmission[]
+  reminders             AppointmentReminder[]
+  kioskSession          KioskSession?
+
+  @@index([patientId])
+  @@index([providerId])
+  @@index([scheduledStart])
+  @@index([status])
+  @@index([locationId])
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  CHECKED_IN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+  RESCHEDULED
+}
+
+model AppointmentType {
+  id              String    @id @default(cuid())
+  name            String
+  code            String?
+  duration        Int       // minutes
+  color           String?
+  description     String?
+  isActive        Boolean   @default(true)
+
+  // Prep and cleanup time
+  prepTime        Int       @default(0)
+  cleanupTime     Int       @default(0)
+
+  // Online booking settings
+  allowOnline     Boolean   @default(true)
+  requireDeposit  Boolean   @default(false)
+  depositAmount   Decimal?  @db.Decimal(10, 2)
+
+  appointments    Appointment[]
+  services        Service[]
+  waitlistEntries WaitlistEntry[]
+
+  // New feature relations
+  onlineBookings  OnlineBooking[]
+}
+
+model Recall {
+  id            String      @id @default(cuid())
+  type          String      // 6-month cleaning, annual exam, etc.
+  dueDate       DateTime
+  status        String      @default("pending") // pending, scheduled, completed
+  notes         String?
+
+  scheduledAt   DateTime?
+  completedAt   DateTime?
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  patient       Patient     @relation(fields: [patientId], references: [id])
+  patientId     String
+}
+
+model WaitlistEntry {
+  id                String          @id @default(cuid())
+  status            String          @default("WAITING") // WAITING, CONTACTED, SCHEDULED, CANCELLED
+  priority          String          @default("NORMAL") // LOW, NORMAL, HIGH, URGENT
+  reason            String
+  notes             String?
+  preferredDays     String[]        // MONDAY, TUESDAY, etc.
+  preferredTimeStart String?        // HH:MM format
+  preferredTimeEnd  String?         // HH:MM format
+  contactedAt       DateTime?
+  scheduledAt       DateTime?
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  patient           Patient         @relation(fields: [patientId], references: [id])
+  patientId         String
+  provider          Provider?       @relation(fields: [providerId], references: [id])
+  providerId        String?
+  appointmentType   AppointmentType @relation(fields: [appointmentTypeId], references: [id])
+  appointmentTypeId String
+}
+
+// ============ CLINICAL ============
+
+model Encounter {
+  id              String          @id @default(cuid())
+  encounterNumber String          @unique
+  type            String          // Office Visit, Follow-up, Procedure, etc.
+  status          EncounterStatus @default(IN_PROGRESS)
+
+  encounterDate   DateTime        @default(now())
+
+  // Vitals
+  bloodPressureSystolic  Int?
+  bloodPressureDiastolic Int?
+  heartRate       Int?
+  temperature     Decimal?        @db.Decimal(4, 1)
+  respiratoryRate Int?
+  oxygenSaturation Int?
+  painLevel       Int?            // 0-10
+  height          Decimal?        @db.Decimal(5, 2)
+  weight          Decimal?        @db.Decimal(5, 2)
+
+  // SOAP Note
+  chiefComplaint  String?
+  subjective      String?
+  objective       String?
+  assessment      String?
+  plan            String?
+
+  // Review of Systems
+  reviewOfSystems Json?
+
+  // Signatures
+  signedBy        String?
+  signedAt        DateTime?
+  coSignedBy      String?
+  coSignedAt      DateTime?
+
+  // AI Scribe
+  audioRecordingUrl String?
+  transcription   String?
+  aiDraftNote     String?
+
+  notes           String?
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  appointment     Appointment?    @relation(fields: [appointmentId], references: [id])
+  appointmentId   String?         @unique
+  provider        Provider        @relation(fields: [providerId], references: [id])
+  providerId      String
+  patient         Patient         @relation(fields: [patientId], references: [id])
+  patientId       String
+  diagnoses       EncounterDiagnosis[]
+  procedures      EncounterProcedure[]
+  orders          Order[]
+  claims          Claim[]
+
+  // New feature relations
+  ambientSessions     AmbientSession[]
+  priorAuthorizations PriorAuthorization[]
+  prescriptions       Prescription[]
+  mentalHealthScreenings MentalHealthScreening[]
+  codingSuggestions   CodingSuggestion[]
+
+  // Production feature relations
+  labOrders           LabOrder[]
+  superbill           Superbill?
+
+  @@index([patientId])
+  @@index([providerId])
+  @@index([encounterDate])
+  @@index([status])
+}
+
+enum EncounterStatus {
+  IN_PROGRESS
+  PENDING_REVIEW
+  SIGNED
+  LOCKED
+  AMENDED
+}
+
+model EncounterDiagnosis {
+  id            String    @id @default(cuid())
+  sequence      Int       // 1 = Primary, 2+ = Secondary
+  icdCode       String
+  description   String
+  notes         String?
+
+  encounter     Encounter @relation(fields: [encounterId], references: [id])
+  encounterId   String
+}
+
+model EncounterProcedure {
+  id            String    @id @default(cuid())
+  cptCode       String
+  description   String
+  quantity      Int       @default(1)
+  modifiers     String[]
+  toothNumber   String?   // For dental
+  surface       String?   // For dental
+  units         Decimal?  @db.Decimal(5, 2)
+  notes         String?
+
+  encounter     Encounter @relation(fields: [encounterId], references: [id])
+  encounterId   String
+  service       Service?  @relation(fields: [serviceId], references: [id])
+  serviceId     String?
+  claimLine     ClaimLine?
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  type          OrderType
+  status        String      @default("pending")
+  priority      String      @default("routine")
+  description   String
+  instructions  String?
+
+  orderedAt     DateTime    @default(now())
+  completedAt   DateTime?
+
+  encounter     Encounter   @relation(fields: [encounterId], references: [id])
+  encounterId   String
+
+  // New feature relations
+  imagingStudy  ImagingStudy?
+}
+
+enum OrderType {
+  LAB
+  IMAGING
+  REFERRAL
+  PRESCRIPTION
+  DME
+  OTHER
+}
+
+// ============ SERVICES & FEES ============
+
+model Service {
+  id              String    @id @default(cuid())
+  code            String    // CPT/CDT code
+  name            String
+  description     String?
+  category        String?
+  duration        Int?      // minutes
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  practice        Practice  @relation(fields: [practiceId], references: [id])
+  practiceId      String
+  appointmentTypes AppointmentType[]
+  feeScheduleItems FeeScheduleItem[]
+  procedures      EncounterProcedure[]
+
+  @@unique([practiceId, code])
+}
+
+model TelehealthSession {
+  id              String    @id @default(cuid())
+  sessionId       String    @unique
+  status          String    @default("SCHEDULED") // SCHEDULED, WAITING, IN_PROGRESS, COMPLETED, CANCELLED
+
+  // Session details
+  scheduledStart  DateTime
+  actualStart     DateTime?
+  actualEnd       DateTime?
+  duration        Int?      // minutes
+
+  // Video platform
+  platform        String    @default("INTERNAL") // INTERNAL, ZOOM, DOXY, TEAMS
+  meetingUrl      String?
+  meetingId       String?
+  passcode        String?
+
+  // Recording
+  isRecorded      Boolean   @default(false)
+  recordingUrl    String?
+  recordingConsent Boolean  @default(false)
+
+  // Technical
+  patientJoinedAt DateTime?
+  providerJoinedAt DateTime?
+  connectionQuality String?
+  technicalIssues Json?
+
+  // Notes
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  appointment     Appointment @relation(fields: [appointmentId], references: [id])
+  appointmentId   String      @unique
+}
+
+model FeeSchedule {
+  id            String    @id @default(cuid())
+  name          String
+  effectiveDate DateTime
+  expirationDate DateTime?
+  isDefault     Boolean   @default(false)
+
+  practice      Practice  @relation(fields: [practiceId], references: [id])
+  practiceId    String
+  items         FeeScheduleItem[]
+}
+
+model FeeScheduleItem {
+  id            String    @id @default(cuid())
+  fee           Decimal   @db.Decimal(10, 2)
+
+  feeSchedule   FeeSchedule @relation(fields: [feeScheduleId], references: [id])
+  feeScheduleId String
+  service       Service   @relation(fields: [serviceId], references: [id])
+  serviceId     String
+
+  @@unique([feeScheduleId, serviceId])
+}
+
+// ============ INSURANCE ============
+
+model InsurancePlan {
+  id              String    @id @default(cuid())
+  name            String
+  payerId         String?   // Clearinghouse payer ID
+  payerName       String
+  planType        String?   // PPO, HMO, EPO, etc.
+  phone           String?
+  fax             String?
+  address         String?
+  city            String?
+  state           String?
+  zip             String?
+
+  // Submission
+  electronicPayerId String?
+  submissionMethod String?  // Electronic, Paper
+
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  practice        Practice  @relation(fields: [practiceId], references: [id])
+  practiceId      String
+  patientInsurances PatientInsurance[]
+  claims          Claim[]
+
+  // New feature relations
+  payerAuthRules  PayerAuthRules[]
+}
+
+// ============ BILLING & CLAIMS ============
+
+model Claim {
+  id              String      @id @default(cuid())
+  claimNumber     String      @unique
+  status          ClaimStatus @default(CREATED)
+
+  // Dates
+  serviceDate     DateTime
+  submittedDate   DateTime?
+  processedDate   DateTime?
+
+  // Amounts
+  totalCharges    Decimal     @db.Decimal(10, 2)
+  allowedAmount   Decimal?    @db.Decimal(10, 2)
+  paidAmount      Decimal?    @db.Decimal(10, 2)
+  adjustmentAmount Decimal?   @db.Decimal(10, 2)
+  patientResponsibility Decimal? @db.Decimal(10, 2)
+
+  // Claim info
+  placeOfService  String?     // 11 = Office, 21 = Hospital, etc.
+
+  // Clearinghouse
+  clearinghouseId String?
+  ediFileId       String?
+
+  // ERA/EOB
+  eraReceived     Boolean     @default(false)
+  eraDate         DateTime?
+
+  // Denial info
+  denialReason    String?
+  denialCode      String?
+
+  notes           String?
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  patient         Patient     @relation(fields: [patientId], references: [id])
+  patientId       String
+  provider        Provider    @relation(fields: [providerId], references: [id])
+  providerId      String
+  encounter       Encounter?  @relation(fields: [encounterId], references: [id])
+  encounterId     String?
+  insurance       PatientInsurance @relation(fields: [insuranceId], references: [id])
+  insuranceId     String
+  insurancePlan   InsurancePlan @relation(fields: [insurancePlanId], references: [id])
+  insurancePlanId String
+  lines           ClaimLine[]
+  payments        ClaimPayment[]
+  submissions     ClaimSubmission[]
+
+  @@index([patientId])
+  @@index([providerId])
+  @@index([serviceDate])
+  @@index([status])
+}
+
+enum ClaimStatus {
+  CREATED
+  VALIDATED
+  SUBMITTED
+  ACKNOWLEDGED
+  PENDING
+  PAID
+  PARTIAL
+  DENIED
+  APPEALED
+  VOID
+}
+
+model ClaimLine {
+  id              String    @id @default(cuid())
+  lineNumber      Int
+  cptCode         String
+  description     String
+  quantity        Int       @default(1)
+  modifiers       String[]
+  units           Decimal   @db.Decimal(5, 2) @default(1)
+
+  // Diagnosis pointers
+  diagnosisPointers Int[]   // References to claim diagnosis order
+
+  chargeAmount    Decimal   @db.Decimal(10, 2)
+  allowedAmount   Decimal?  @db.Decimal(10, 2)
+  paidAmount      Decimal?  @db.Decimal(10, 2)
+  adjustmentAmount Decimal? @db.Decimal(10, 2)
+
+  // Denial
+  denialReason    String?
+  remarkCodes     String[]
+
+  claim           Claim     @relation(fields: [claimId], references: [id])
+  claimId         String
+  procedure       EncounterProcedure? @relation(fields: [procedureId], references: [id])
+  procedureId     String?             @unique
+}
+
+model ClaimPayment {
+  id            String    @id @default(cuid())
+  paymentDate   DateTime
+  checkNumber   String?
+  amount        Decimal   @db.Decimal(10, 2)
+  payerType     String    // Insurance, Patient
+  reference     String?
+
+  createdAt     DateTime  @default(now())
+
+  claim         Claim     @relation(fields: [claimId], references: [id])
+  claimId       String
+}
+
+model PatientPayment {
+  id            String        @id @default(cuid())
+  amount        Decimal       @db.Decimal(10, 2)
+  method        PaymentMethod
+  reference     String?
+  date          DateTime      @default(now())
+  notes         String?
+
+  // Stripe integration
+  stripePaymentIntentId String?
+  stripeRefundId        String?
+  status                String?   @default("completed") // pending, completed, refunded, failed
+
+  patient       Patient       @relation(fields: [patientId], references: [id])
+  patientId     String
+}
+
+enum PaymentMethod {
+  CASH
+  CHECK
+  CREDIT_CARD
+  DEBIT_CARD
+  ACH
+  OTHER
+}
+
+model PatientBalance {
+  id            String    @id @default(cuid())
+  totalCharges  Decimal   @db.Decimal(10, 2) @default(0)
+  insurancePaid Decimal   @db.Decimal(10, 2) @default(0)
+  patientPaid   Decimal   @db.Decimal(10, 2) @default(0)
+  adjustments   Decimal   @db.Decimal(10, 2) @default(0)
+  balance       Decimal   @db.Decimal(10, 2) @default(0)
+
+  lastUpdated   DateTime  @updatedAt
+
+  patient       Patient   @relation(fields: [patientId], references: [id])
+  patientId     String    @unique
+}
+
+// ============ DOCUMENTS ============
+
+model PatientDocument {
+  id            String        @id @default(cuid())
+  name          String
+  type          DocumentType
+  category      String?
+  filePath      String        // Encrypted path
+  fileSize      Int
+  mimeType      String
+  description   String?
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  patient       Patient       @relation(fields: [patientId], references: [id])
+  patientId     String
+}
+
+enum DocumentType {
+  INTAKE_FORM
+  CONSENT
+  INSURANCE_CARD
+  ID
+  LAB_RESULT
+  IMAGING
+  REFERRAL
+  CORRESPONDENCE
+  OTHER
+}
+
+// ============ HIPAA COMPLIANCE ============
+
+model BAAgreement {
+  id              String    @id @default(cuid())
+  vendorName      String
+  vendorType      String    // Cloud hosting, EHR, Clearinghouse, etc.
+  effectiveDate   DateTime
+  expirationDate  DateTime?
+  documentPath    String?
+  status          String    @default("active")
+  contactName     String?
+  contactEmail    String?
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  practice        Practice  @relation(fields: [practiceId], references: [id])
+  practiceId      String
+}
+
+model AuditLog {
+  id            String    @id @default(cuid())
+  action        String    // CREATE, READ, UPDATE, DELETE, LOGIN, LOGOUT, EXPORT
+  entity        String    // Patient, Encounter, Claim, etc.
+  entityId      String?
+  patientId     String?   // Track PHI access specifically
+  changes       Json?     // Before/after for updates
+  ipAddress     String?
+  userAgent     String?
+  phiAccessed   Boolean   @default(false)
+
+  createdAt     DateTime  @default(now())
+
+  user          User      @relation(fields: [userId], references: [id])
+  userId        String
+
+  @@index([patientId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ============ ICD/CPT CODES ============
+
+model ICD10Code {
+  id            String    @id @default(cuid())
+  code          String    @unique
+  description   String
+  category      String?
+  isActive      Boolean   @default(true)
+}
+
+model CPTCode {
+  id            String    @id @default(cuid())
+  code          String    @unique
+  description   String
+  category      String?
+  workRVU       Decimal?  @db.Decimal(5, 2)
+  isActive      Boolean   @default(true)
+}
+
+// ============ REAL-TIME AMBIENT SCRIBE ============
+
+model AmbientSession {
+  id              String    @id @default(cuid())
+  encounterId     String?
+  patientId       String
+  providerId      String
+  status          AmbientSessionStatus @default(ACTIVE)
+
+  // Audio stream data
+  audioChunks     Json[]    // Array of audio chunk metadata
+
+  // Real-time transcription
+  liveTranscript  String?   @db.Text
+  speakerSegments Json[]    // Speaker diarization data
+
+  // Generated content
+  draftSoapNote   Json?     // Generated SOAP note
+  suggestedCodes  Json?     // Suggested ICD/CPT codes
+
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  patient         Patient   @relation(fields: [patientId], references: [id])
+  provider        Provider  @relation(fields: [providerId], references: [id])
+  encounter       Encounter? @relation(fields: [encounterId], references: [id])
+}
+
+enum AmbientSessionStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+// ============ PRIOR AUTHORIZATION ============
+
+model PriorAuthorization {
+  id              String    @id @default(cuid())
+  authNumber      String?   // Authorization number from payer
+  status          PriorAuthStatus @default(PENDING)
+  urgency         String    @default("STANDARD") // STANDARD, URGENT
+
+  // Request details
+  requestDate     DateTime  @default(now())
+  serviceDate     DateTime?
+  expirationDate  DateTime?
+
+  // Service being authorized
+  serviceType     String    // Medical, Surgical, Imaging, DME, etc.
+  procedureCodes  String[]  // CPT codes
+  diagnosisCodes  String[]  // ICD codes
+  quantity        Int       @default(1)
+
+  // Clinical justification
+  clinicalNotes   String?   @db.Text
+  supportingDocs  String[]  // File paths
+
+  // Payer response
+  approvedUnits   Int?
+  denialReason    String?
+  appealDeadline  DateTime?
+
+  // Communication tracking
+  submissionMethod String?  // Fax, Portal, Phone, API
+  submittedAt     DateTime?
+  respondedAt     DateTime?
+
+  // Auto-submission tracking
+  autoSubmitted   Boolean   @default(false)
+  submissionLog   Json[]    // History of submission attempts
+
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  patient         Patient   @relation(fields: [patientId], references: [id])
+  patientId       String
+  provider        Provider  @relation(fields: [providerId], references: [id])
+  providerId      String
+  insurance       PatientInsurance @relation(fields: [insuranceId], references: [id])
+  insuranceId     String
+  encounter       Encounter? @relation(fields: [encounterId], references: [id])
+  encounterId     String?
+}
+
+enum PriorAuthStatus {
+  PENDING
+  SUBMITTED
+  IN_REVIEW
+  APPROVED
+  PARTIALLY_APPROVED
+  DENIED
+  APPEALED
+  EXPIRED
+  CANCELLED
+}
+
+model PayerAuthRules {
+  id              String    @id @default(cuid())
+  payerId         String    // Insurance plan ID
+  procedureCode   String    // CPT code
+  requiresAuth    Boolean   @default(true)
+  authCriteria    Json?     // Criteria for authorization
+  typicalDuration Int?      // Days to process
+  submissionUrl   String?   // Portal URL
+  submissionFax   String?   // Fax number
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  insurancePlan   InsurancePlan @relation(fields: [payerId], references: [id])
+
+  @@unique([payerId, procedureCode])
+}
+
+// ============ PATIENT SELF-SCHEDULING ============
+
+model OnlineBookingSettings {
+  id                  String    @id @default(cuid())
+  practiceId          String    @unique
+  enabled             Boolean   @default(true)
+
+  // Booking window
+  minLeadTimeHours    Int       @default(24)   // Min hours before appointment
+  maxLeadTimeDays     Int       @default(60)   // Max days in advance
+
+  // Cancellation policy
+  cancellationHours   Int       @default(24)   // Hours before appt for free cancel
+
+  // New patient settings
+  allowNewPatients    Boolean   @default(true)
+  newPatientFormUrl   String?
+
+  // Reminders
+  sendConfirmation    Boolean   @default(true)
+  sendReminder24h     Boolean   @default(true)
+  sendReminder2h      Boolean   @default(true)
+
+  // Customization
+  welcomeMessage      String?   @db.Text
+  confirmationMessage String?   @db.Text
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  practice            Practice  @relation(fields: [practiceId], references: [id])
+}
+
+model OnlineBooking {
+  id                String    @id @default(cuid())
+  confirmationCode  String    @unique
+  status            BookingStatus @default(PENDING)
+
+  // Patient info (for new patients)
+  patientId         String?
+  firstName         String
+  lastName          String
+  email             String
+  phone             String
+  dateOfBirth       DateTime
+  isNewPatient      Boolean   @default(false)
+
+  // Appointment details
+  appointmentTypeId String
+  providerId        String
+  locationId        String
+  requestedDate     DateTime
+  requestedTime     String    // HH:MM format
+
+  // Additional info
+  reason            String?
+  notes             String?
+  insuranceInfo     Json?     // Self-reported insurance
+
+  // Confirmation
+  confirmedAt       DateTime?
+  appointmentId     String?   // Created appointment
+
+  // Notifications sent
+  confirmationSent  Boolean   @default(false)
+  reminder24hSent   Boolean   @default(false)
+  reminder2hSent    Boolean   @default(false)
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  patient           Patient?  @relation(fields: [patientId], references: [id])
+  appointmentType   AppointmentType @relation(fields: [appointmentTypeId], references: [id])
+  provider          Provider  @relation(fields: [providerId], references: [id])
+  location          Location  @relation(fields: [locationId], references: [id])
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  NO_SHOW
+  COMPLETED
+}
+
+// ============ FHIR INTEROPERABILITY ============
+
+model FHIRConnection {
+  id              String    @id @default(cuid())
+  name            String
+  type            String    // EHR, LAB, IMAGING, HIE
+  status          String    @default("active")
+
+  // Connection details
+  baseUrl         String
+  clientId        String?
+  clientSecret    String?   // Encrypted
+  accessToken     String?   // Encrypted
+  tokenExpiry     DateTime?
+
+  // Supported resources
+  resources       String[]  // Patient, Observation, DiagnosticReport, etc.
+
+  // Sync settings
+  autoSync        Boolean   @default(false)
+  syncInterval    Int?      // Minutes
+  lastSyncAt      DateTime?
+
+  // Metadata
+  fhirVersion     String    @default("R4")
+  capabilities    Json?     // CapabilityStatement
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  practiceId      String
+  practice        Practice  @relation(fields: [practiceId], references: [id])
+  syncLogs        FHIRSyncLog[]
+}
+
+model FHIRSyncLog {
+  id              String    @id @default(cuid())
+  connectionId    String
+  direction       String    // inbound, outbound
+  resourceType    String    // Patient, Observation, etc.
+  resourceId      String?
+  operation       String    // create, read, update, delete
+  status          String    // success, error
+  requestData     Json?
+  responseData    Json?
+  errorMessage    String?
+
+  createdAt       DateTime  @default(now())
+
+  connection      FHIRConnection @relation(fields: [connectionId], references: [id])
+}
+
+model FHIRResourceMapping {
+  id              String    @id @default(cuid())
+  localResource   String    // Local table name
+  localField      String    // Local field name
+  fhirResource    String    // FHIR resource type
+  fhirPath        String    // FHIR element path
+  direction       String    // inbound, outbound, both
+  transformation  String?   // Transformation rule
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// ============ E-PRESCRIBING ============
+
+model Prescription {
+  id              String    @id @default(cuid())
+  rxNumber        String    @unique
+  status          PrescriptionStatus @default(DRAFT)
+
+  // Medication details
+  drugName        String
+  drugCode        String?   // NDC or RxNorm
+  strength        String?
+  form            String?   // Tablet, Capsule, Solution, etc.
+
+  // Sig (directions)
+  dosage          String
+  frequency       String
+  route           String    @default("Oral")
+  duration        String?
+  quantity        Int
+  quantityUnit    String    @default("tablets")
+  refills         Int       @default(0)
+
+  // DAW (Dispense As Written)
+  dispenseAsWritten Boolean @default(false)
+
+  // Controlled substance
+  isControlled    Boolean   @default(false)
+  scheduleClass   String?   // II, III, IV, V
+  deaNumber       String?   // Provider DEA number used
+
+  // EPCS (Electronic Prescribing for Controlled Substances)
+  epcsEnabled     Boolean   @default(false)
+  epcsSigned      Boolean   @default(false)
+  epcsSignedAt    DateTime?
+  epcsSignature   String?   // Encrypted
+
+  // Pharmacy
+  pharmacyId      String?
+  pharmacyNpi     String?
+  pharmacyName    String?
+  pharmacyAddress String?
+  pharmacyPhone   String?
+  pharmacyFax     String?
+
+  // Transmission
+  transmissionMethod String? // Electronic, Fax, Print
+  transmittedAt   DateTime?
+  transmissionRef String?   // Surescripts reference
+  transmissionStatus String?
+
+  // Clinical
+  indication      String?   // Diagnosis/reason
+  notes           String?
+
+  writtenDate     DateTime  @default(now())
+  effectiveDate   DateTime?
+  expirationDate  DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  patient         Patient   @relation(fields: [patientId], references: [id])
+  patientId       String
+  provider        Provider  @relation(fields: [providerId], references: [id])
+  providerId      String
+  encounter       Encounter? @relation(fields: [encounterId], references: [id])
+  encounterId     String?
+
+  renewals        PrescriptionRenewal[]
+  fills           PrescriptionFill[]
+  drfirstTransactions DrFirstTransaction[]
+}
+
+enum PrescriptionStatus {
+  DRAFT
+  PENDING_SIGNATURE
+  READY_TO_SEND
+  SENT
+  RECEIVED
+  FILLED
+  PARTIAL_FILL
+  CANCELLED
+  EXPIRED
+  DENIED
+}
+
+model PrescriptionRenewal {
+  id              String    @id @default(cuid())
+  status          String    @default("PENDING")
+  requestDate     DateTime  @default(now())
+  requestSource   String?   // Pharmacy, Patient
+
+  // Approval
+  approvedBy      String?
+  approvedAt      DateTime?
+  denialReason    String?
+
+  // New prescription created
+  newRxId         String?
+
+  prescription    Prescription @relation(fields: [prescriptionId], references: [id])
+  prescriptionId  String
+}
+
+model PrescriptionFill {
+  id              String    @id @default(cuid())
+  fillNumber      Int       // 0 = original, 1+ = refills
+  fillDate        DateTime
+  quantityFilled  Int
+  daysSupply      Int?
+  pharmacyNpi     String?
+
+  prescription    Prescription @relation(fields: [prescriptionId], references: [id])
+  prescriptionId  String
+}
+
+model Pharmacy {
+  id              String    @id @default(cuid())
+  npi             String    @unique
+  name            String
+  ncpdpId         String?   // NCPDP ID for e-prescribing
+
+  address         String
+  city            String
+  state           String
+  zip             String
+  phone           String
+  fax             String?
+
+  // Capabilities
+  acceptsEpcs     Boolean   @default(false)
+  acceptsNewRx    Boolean   @default(true)
+  acceptsRefill   Boolean   @default(true)
+  accepts24Hour   Boolean   @default(false)
+
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model DrugDatabase {
+  id              String    @id @default(cuid())
+  ndcCode         String    @unique
+  rxNormCode      String?
+
+  brandName       String
+  genericName     String
+  strength        String?
+  form            String?
+  route           String?
+  manufacturer    String?
+
+  // Classification
+  therapeuticClass String?
+  pharmacologicClass String?
+
+  // Controlled substance
+  isControlled    Boolean   @default(false)
+  scheduleClass   String?
+
+  // Interactions
+  interactions    Json?     // Drug interaction data
+
+  // Formulary
+  isFormulary     Boolean   @default(true)
+
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// ============ MEDICAL IMAGING ============
+
+model ImagingStudy {
+  id              String    @id @default(cuid())
+  accessionNumber String    @unique
+  status          ImagingStudyStatus @default(SCHEDULED)
+
+  // Study info
+  modality        String    // CT, MR, XR, US, etc.
+  bodyPart        String?
+  studyDescription String?
+
+  // DICOM metadata
+  studyInstanceUid String?  @unique
+  seriesCount     Int       @default(0)
+  instanceCount   Int       @default(0)
+
+  // Dates
+  scheduledDate   DateTime?
+  performedDate   DateTime?
+
+  // Results
+  findings        String?   @db.Text
+  impression      String?   @db.Text
+  reportedBy      String?
+  reportedAt      DateTime?
+
+  // AI analysis
+  aiAnalysis      Json?     // AI-generated findings
+  aiConfidence    Decimal?  @db.Decimal(5, 2)
+
+  // Storage
+  storageLocation String?   // Path or URL to DICOM files
+  thumbnailUrl    String?
+
+  // Order reference
+  orderId         String?   @unique
+
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  patient         Patient   @relation(fields: [patientId], references: [id])
+  patientId       String
+  provider        Provider? @relation(fields: [providerId], references: [id])
+  providerId      String?
+  order           Order?    @relation(fields: [orderId], references: [id])
+
+  series          ImagingSeries[]
+}
+
+enum ImagingStudyStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  REPORTED
+  CANCELLED
+}
+
+model ImagingSeries {
+  id              String    @id @default(cuid())
+  seriesInstanceUid String  @unique
+  seriesNumber    Int
+  modality        String
+  description     String?
+  bodyPart        String?
+  instanceCount   Int       @default(0)
+
+  study           ImagingStudy @relation(fields: [studyId], references: [id])
+  studyId         String
+
+  instances       ImagingInstance[]
+}
+
+model ImagingInstance {
+  id              String    @id @default(cuid())
+  sopInstanceUid  String    @unique
+  instanceNumber  Int
+
+  // Image data
+  rows            Int?
+  columns         Int?
+  bitsAllocated   Int?
+  photometricInterpretation String?
+
+  // File info
+  filePath        String
+  fileSize        Int?
+
+  series          ImagingSeries @relation(fields: [seriesId], references: [id])
+  seriesId        String
+}
+
+// ============ MENTAL HEALTH SCREENING ============
+
+model MentalHealthScreening {
+  id              String    @id @default(cuid())
+  type            ScreeningType
+  status          String    @default("COMPLETED")
+
+  // Screening data
+  responses       Json      // Question responses
+  totalScore      Int
+  interpretation  String?   // Based on scoring guidelines
+  riskLevel       String?   // LOW, MODERATE, HIGH, SEVERE
+
+  // Clinical notes
+  providerNotes   String?   @db.Text
+  followUpPlan    String?
+
+  // Referral
+  referralMade    Boolean   @default(false)
+  referralTo      String?
+
+  administeredAt  DateTime  @default(now())
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  patient         Patient   @relation(fields: [patientId], references: [id])
+  patientId       String
+  encounter       Encounter? @relation(fields: [encounterId], references: [id])
+  encounterId     String?
+  provider        Provider? @relation(fields: [providerId], references: [id])
+  providerId      String?
+}
+
+enum ScreeningType {
+  PHQ9          // Depression
+  GAD7          // Anxiety
+  PHQ2          // Depression quick screen
+  GAD2          // Anxiety quick screen
+  AUDIT_C       // Alcohol use
+  DAST_10       // Drug use
+  PCL5          // PTSD
+  MDQ           // Bipolar
+  CSSRS         // Suicide risk
+  EDINBURGH     // Postpartum depression
+  CUSTOM
+}
+
+model ScreeningTemplate {
+  id              String    @id @default(cuid())
+  type            ScreeningType
+  name            String
+  description     String?
+
+  // Questions
+  questions       Json      // Array of question objects
+  scoringGuide    Json?     // How to interpret scores
+
+  // Thresholds
+  mildThreshold   Int?
+  moderateThreshold Int?
+  severeThreshold Int?
+
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// ============ PATIENT ENGAGEMENT ============
+
+model IntakeForm {
+  id              String    @id @default(cuid())
+  name            String
+  type            IntakeFormType
+  description     String?
+
+  // Form definition
+  fields          Json      // Form field definitions
+
+  // Settings
+  isRequired      Boolean   @default(false)
+  requiresSignature Boolean @default(false)
+  expirationDays  Int?      // Days until form expires
+
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  practiceId      String
+  practice        Practice  @relation(fields: [practiceId], references: [id])
+  submissions     IntakeFormSubmission[]
+}
+
+enum IntakeFormType {
+  DEMOGRAPHICS
+  MEDICAL_HISTORY
+  MEDICATIONS
+  ALLERGIES
+  FAMILY_HISTORY
+  SOCIAL_HISTORY
+  REVIEW_OF_SYSTEMS
+  CONSENT
+  INSURANCE
+  CUSTOM
+}
+
+model IntakeFormSubmission {
+  id              String    @id @default(cuid())
+  status          String    @default("PENDING") // PENDING, SUBMITTED, REVIEWED
+
+  // Submission data
+  responses       Json
+  signatureData   String?   // Base64 signature if required
+  signedAt        DateTime?
+
+  // Processing
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  importedToChart Boolean   @default(false)
+
+  submittedAt     DateTime  @default(now())
+  expiresAt       DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  form            IntakeForm @relation(fields: [formId], references: [id])
+  formId          String
+  patient         Patient?  @relation(fields: [patientId], references: [id])
+  patientId       String?
+  appointment     Appointment? @relation(fields: [appointmentId], references: [id])
+  appointmentId   String?
+}
+
+model AppointmentReminder {
+  id              String    @id @default(cuid())
+  type            ReminderType
+  scheduledFor    DateTime
+  status          String    @default("PENDING") // PENDING, SENT, FAILED, CANCELLED
+
+  // Content
+  channel         String    // EMAIL, SMS, VOICE
+  message         String?
+
+  // Delivery
+  sentAt          DateTime?
+  deliveryStatus  String?
+  errorMessage    String?
+
+  // Response (for confirmations)
+  responseReceived Boolean  @default(false)
+  responseType    String?   // CONFIRMED, CANCELLED, RESCHEDULED
+  responseAt      DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  appointment     Appointment @relation(fields: [appointmentId], references: [id])
+  appointmentId   String
+}
+
+enum ReminderType {
+  CONFIRMATION
+  REMINDER_24H
+  REMINDER_2H
+  FOLLOWUP
+  RECALL
+  CUSTOM
+}
+
+model ChatbotConversation {
+  id              String    @id @default(cuid())
+  sessionId       String    @unique
+  channel         String    // WEB, SMS, VOICE
+  status          String    @default("ACTIVE")
+
+  // Context
+  patientId       String?
+  intent          String?   // BOOKING, FAQ, SYMPTOMS, BILLING, OTHER
+
+  // Conversation
+  messages        Json[]    // Array of message objects
+  context         Json?     // Conversation context/state
+
+  // Handoff
+  handedOffToHuman Boolean  @default(false)
+  handoffReason   String?
+  handoffAt       DateTime?
+
+  // Analytics
+  messagesCount   Int       @default(0)
+  resolvedSuccessfully Boolean?
+
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  patient         Patient?  @relation(fields: [patientId], references: [id])
+}
+
+// ============ REAL-TIME CODING AI ============
+
+model CodingSuggestion {
+  id              String    @id @default(cuid())
+  encounterId     String
+
+  // Trigger
+  triggerText     String    @db.Text
+  triggerPosition Int?      // Position in note
+
+  // Suggestion
+  codeType        String    // ICD10, CPT
+  code            String
+  description     String
+  confidence      Decimal   @db.Decimal(5, 2)
+
+  // Status
+  status          String    @default("SUGGESTED") // SUGGESTED, ACCEPTED, REJECTED
+  acceptedAt      DateTime?
+  rejectedAt      DateTime?
+  rejectionReason String?
+
+  createdAt       DateTime  @default(now())
+
+  encounter       Encounter @relation(fields: [encounterId], references: [id])
+}
+
+model CodingAuditRule {
+  id              String    @id @default(cuid())
+  name            String
+  description     String?
+
+  // Rule definition
+  ruleType        String    // BUNDLING, MEDICAL_NECESSITY, MODIFIER, FREQUENCY
+  conditions      Json      // Rule conditions
+  action          String    // WARN, BLOCK, SUGGEST
+  message         String
+
+  // Applicability
+  cptCodes        String[]  // Applicable CPT codes
+  icdCodes        String[]  // Applicable ICD codes
+
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// ============ DOCUMENT STORAGE (ENCRYPTED) ============
+
+model EncryptedDocument {
+  id              String    @id @default(cuid())
+
+  // File metadata
+  originalName    String
+  encryptedPath   String?   // Local filesystem path (optional)
+  encryptionKeyId String    // Reference to key used
+  fileSize        Int
+  mimeType        String
+  checksum        String    // SHA-256 hash for integrity
+  fileContent     Bytes?    // Store file content directly in DB
+
+  // Classification
+  category        String    // CLINICAL, BILLING, ADMINISTRATIVE, FAX
+  documentType    String    // Specific type within category
+
+  // Associations
+  patientId       String?
+  encounterId     String?
+  claimId         String?
+  faxMessageId    String?
+
+  // Access control
+  accessLevel     String    @default("PROVIDER") // PROVIDER, STAFF, BILLING, ADMIN
+
+  // Lifecycle
+  retentionDate   DateTime? // HIPAA: 6 years minimum
+  archivedAt      DateTime?
+  deletedAt       DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  createdBy       String
+
+  patient         Patient?  @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@index([category])
+  @@index([createdAt])
+}
+
+// ============ LAB ORDER TRACKING ============
+
+model LabOrder {
+  id              String          @id @default(cuid())
+  orderNumber     String          @unique
+  status          LabOrderStatus  @default(PENDING)
+
+  // Order details
+  orderedAt       DateTime        @default(now())
+  orderedBy       String          // Provider ID
+
+  // Lab info (internal tracking)
+  labName         String?         // Reference lab name
+  labPhone        String?
+  labFax          String?
+
+  // Specimen
+  specimenType    String?         // Blood, Urine, Tissue, etc.
+  specimenCollectedAt DateTime?
+  specimenSentAt  DateTime?
+
+  // Tests ordered
+  testCodes       String[]        // CPT codes
+  testDescriptions String[]
+
+  // Urgency
+  priority        String          @default("ROUTINE") // STAT, ROUTINE, ASAP
+
+  // Results tracking
+  expectedResultsAt DateTime?
+  resultsReceivedAt DateTime?
+  resultsDocumentId String?       // Link to EncryptedDocument
+
+  // Clinical
+  icdCodes        String[]
+  clinicalNotes   String?
+
+  // Follow-up
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  followUpRequired Boolean        @default(false)
+  followUpNotes   String?
+  patientNotified Boolean         @default(false)
+  patientNotifiedAt DateTime?
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  patientId       String
+  encounterId     String?
+
+  patient         Patient         @relation(fields: [patientId], references: [id])
+  encounter       Encounter?      @relation(fields: [encounterId], references: [id])
+  statusHistory   LabOrderStatusHistory[]
+
+  @@index([patientId])
+  @@index([status])
+  @@index([orderedAt])
+}
+
+enum LabOrderStatus {
+  PENDING
+  SPECIMEN_COLLECTED
+  SENT_TO_LAB
+  IN_PROGRESS
+  RESULTS_RECEIVED
+  REVIEWED
+  COMPLETED
+  CANCELLED
+}
+
+model LabOrderStatusHistory {
+  id          String          @id @default(cuid())
+  labOrderId  String
+  status      LabOrderStatus
+  changedAt   DateTime        @default(now())
+  changedBy   String
+  notes       String?
+
+  labOrder    LabOrder        @relation(fields: [labOrderId], references: [id])
+
+  @@index([labOrderId])
+}
+
+// ============ CLAIMS SUBMISSION (CLEARINGHOUSE) ============
+
+model ClaimSubmission {
+  id                String    @id @default(cuid())
+  claimId           String
+  submissionType    String    // ORIGINAL, CORRECTED, VOID
+  transactionId     String?   // Change Healthcare transaction ID
+
+  // EDI 837 data
+  edi837Content     String?   @db.Text
+  edi837FileName    String?
+
+  // Response tracking
+  submittedAt       DateTime?
+  acknowledgedAt    DateTime?
+  processedAt       DateTime?
+
+  // Status from clearinghouse
+  clearinghouseStatus String  @default("PENDING")
+  responseCode      String?
+  responseMessage   String?
+
+  // ERA/835 data
+  era835Content     String?   @db.Text
+  era835ReceivedAt  DateTime?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  claim             Claim     @relation(fields: [claimId], references: [id])
+
+  @@index([claimId])
+  @@index([transactionId])
+}
+
+// ============ ELIGIBILITY VERIFICATION ============
+
+model EligibilityCheck {
+  id                  String    @id @default(cuid())
+  patientInsuranceId  String
+  transactionId       String?   // Change Healthcare transaction ID
+
+  // Request data
+  serviceDate         DateTime
+  serviceTypeCodes    String[]  // 30=Health Benefit Plan Coverage, etc.
+
+  // EDI 270/271 data
+  edi270Content       String?   @db.Text
+  edi271Content       String?   @db.Text
+
+  // Parsed response
+  eligibilityStatus   String    // ACTIVE, INACTIVE, UNKNOWN
+  coverageDetails     Json?     // Parsed benefit information
+  copayInfo           Json?
+  deductibleInfo      Json?
+  outOfPocketInfo     Json?
+
+  // Caching
+  checkedAt           DateTime  @default(now())
+  expiresAt           DateTime  // Cache expiration
+
+  createdAt           DateTime  @default(now())
+
+  patientInsurance    PatientInsurance @relation(fields: [patientInsuranceId], references: [id])
+
+  @@index([patientInsuranceId])
+  @@index([checkedAt])
+}
+
+// ============ E-PRESCRIBING (DRFIRST) ============
+
+model DrFirstTransaction {
+  id                String    @id @default(cuid())
+  prescriptionId    String
+  transactionType   String    // NEWRX, REFILL_REQUEST, CANCEL, CHANGE
+  transactionId     String?   // DrFirst transaction ID
+
+  // Surescripts message
+  ncpdpScriptVersion String?  // 10.6, 2017071, etc.
+  messageContent    String?   @db.Text
+
+  // Status tracking
+  status            String    @default("PENDING")
+  sentAt            DateTime?
+  acknowledgedAt    DateTime?
+
+  // Response
+  responseCode      String?
+  responseMessage   String?
+  pharmacyResponse  Json?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  prescription      Prescription @relation(fields: [prescriptionId], references: [id])
+
+  @@index([prescriptionId])
+  @@index([transactionId])
+}
+
+model ProviderEPCS {
+  id                  String    @id @default(cuid())
+  providerId          String    @unique
+
+  // Identity proofing
+  identityProofedAt   DateTime?
+  identityProofMethod String?
+
+  // DEA registration
+  deaNumber           String?
+  deaExpirationDate   DateTime?
+  deaSchedules        String[]  // II, III, IV, V
+
+  // Two-factor for EPCS
+  epcsTokenSerial     String?
+  epcsTokenActivatedAt DateTime?
+
+  // Certification
+  epcsActivatedAt     DateTime?
+  epcsDeactivatedAt   DateTime?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  provider            Provider  @relation(fields: [providerId], references: [id])
+}
+
+// ============ FAX INTEGRATION (TWILIO) ============
+
+model FaxMessage {
+  id              String    @id @default(cuid())
+  direction       String    // INBOUND, OUTBOUND
+  status          String    @default("PENDING")
+
+  // Twilio references
+  twilioSid       String?   @unique
+  twilioMediaUrl  String?
+
+  // Sender/recipient
+  fromNumber      String
+  toNumber        String
+
+  // Content
+  numPages        Int?
+  quality         String?
+  documentPath    String?   // Encrypted local path
+
+  // Association (optional)
+  patientId       String?
+  encounterId     String?
+  prescriptionId  String?
+  priorAuthId     String?
+
+  // Processing
+  processedAt     DateTime?
+  processedBy     String?
+  category        String?   // LAB_RESULT, REFERRAL, RX_REQUEST, etc.
+
+  sentAt          DateTime?
+  receivedAt      DateTime?
+  failedAt        DateTime?
+  errorMessage    String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  patient         Patient?  @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============ PATIENT SELF CHECK-IN KIOSK ============
+
+model KioskSession {
+  id                  String    @id @default(cuid())
+  sessionToken        String    @unique
+  status              String    @default("ACTIVE")
+
+  // Identification
+  appointmentId       String?   @unique
+  patientId           String?
+
+  // Check-in flow
+  verificationMethod  String?   // DOB, LAST4SSN, PHONE
+  verifiedAt          DateTime?
+
+  // Forms completed
+  demographicsUpdated Boolean   @default(false)
+  insuranceVerified   Boolean   @default(false)
+  consentsSigned      Boolean   @default(false)
+  formsCompleted      String[]  // Form IDs
+
+  // Payment
+  copayCollected      Decimal?  @db.Decimal(10, 2)
+  paymentMethod       String?
+  paymentTransactionId String?
+
+  // Timing
+  startedAt           DateTime  @default(now())
+  completedAt         DateTime?
+  expiredAt           DateTime?
+
+  // Device info
+  deviceId            String?
+  locationId          String?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  appointment         Appointment? @relation(fields: [appointmentId], references: [id])
+  patient             Patient?    @relation(fields: [patientId], references: [id])
+
+  @@index([appointmentId])
+  @@index([patientId])
+  @@index([sessionToken])
+}
+
+model KioskDevice {
+  id                    String    @id @default(cuid())
+  deviceName            String
+  deviceToken           String    @unique
+  locationId            String
+
+  // Configuration
+  enablePayments        Boolean   @default(true)
+  enableInsuranceCapture Boolean  @default(true)
+  enableFormSigning     Boolean   @default(true)
+
+  // Status
+  lastHeartbeat         DateTime?
+  isOnline              Boolean   @default(false)
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  location              Location  @relation(fields: [locationId], references: [id])
+
+  @@index([locationId])
+}
+
+// ============ SUPERBILL / WALKOUT STATEMENT ============
+
+model Superbill {
+  id                String    @id @default(cuid())
+  superbillNumber   String    @unique
+
+  // Visit info
+  encounterId       String    @unique
+  patientId         String
+  providerId        String
+  serviceDate       DateTime
+
+  // Diagnoses
+  diagnoses         Json      // Array of ICD codes with descriptions
+
+  // Procedures/services
+  procedures        Json      // Array of CPT codes with fees
+
+  // Totals
+  totalCharges      Decimal   @db.Decimal(10, 2)
+  insuranceEstimate Decimal?  @db.Decimal(10, 2)
+  patientEstimate   Decimal?  @db.Decimal(10, 2)
+  amountPaid        Decimal   @db.Decimal(10, 2) @default(0)
+
+  // Payment collected at checkout
+  paymentCollected  Decimal?  @db.Decimal(10, 2)
+  paymentMethod     String?
+  paymentTransactionId String?
+
+  // PDF generation
+  pdfPath           String?   // Path to generated PDF
+  pdfGeneratedAt    DateTime?
+
+  // Delivery
+  printedAt         DateTime?
+  emailedAt         DateTime?
+  emailedTo         String?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  encounter         Encounter @relation(fields: [encounterId], references: [id])
+  patient           Patient   @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@index([serviceDate])
+}
+
+// ============ QUALITY MEASURES / MIPS ============
+
+model QualityMeasure {
+  id                      String    @id @default(cuid())
+  measureId               String    @unique // CMS measure ID (e.g., "CMS134v8")
+  measureTitle            String
+  category                String    // QUALITY, PI, IA, COST
+  domain                  String?   // E.g., "Effective Clinical Care"
+
+  // Measure details
+  description             String?   @db.Text
+  numeratorDescription    String?   @db.Text
+  denominatorDescription  String?   @db.Text
+  exclusionCriteria       String?   @db.Text
+
+  // Scoring
+  highPriority            Boolean   @default(false)
+  outcomeOrPatientExp     Boolean   @default(false)
+  measurePoints           Int       @default(10)
+
+  // Benchmark data
+  benchmark3Star          Decimal?  @db.Decimal(5, 2)
+  benchmark4Star          Decimal?  @db.Decimal(5, 2)
+  benchmark5Star          Decimal?  @db.Decimal(5, 2)
+
+  isActive                Boolean   @default(true)
+
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  patientMeasures         PatientQualityMeasure[]
+}
+
+model PatientQualityMeasure {
+  id                  String    @id @default(cuid())
+  measureId           String
+  patientId           String
+  providerId          String
+
+  // Performance period
+  performanceYear     Int
+  performanceStart    DateTime
+  performanceEnd      DateTime
+
+  // Status
+  inDenominator       Boolean   @default(false)
+  inNumerator         Boolean   @default(false)
+  isExcluded          Boolean   @default(false)
+  isException         Boolean   @default(false)
+
+  // Data points
+  measureDate         DateTime?
+  measureValue        String?
+  measureValueNumeric Decimal?  @db.Decimal(10, 2)
+
+  // Documentation
+  encounterId         String?
+  documentationNotes  String?
+
+  // Automation
+  autoCalculated      Boolean   @default(false)
+  lastCalculatedAt    DateTime?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  measure             QualityMeasure @relation(fields: [measureId], references: [id])
+  patient             Patient   @relation(fields: [patientId], references: [id])
+
+  @@unique([measureId, patientId, performanceYear])
+  @@index([patientId])
+  @@index([providerId])
+  @@index([performanceYear])
+}
+
+model MIPSSubmission {
+  id                String    @id @default(cuid())
+  submissionYear    Int
+  submissionType    String    // INDIVIDUAL, GROUP
+
+  // Submission data
+  qualityScore      Decimal?  @db.Decimal(5, 2)
+  piScore           Decimal?  @db.Decimal(5, 2)
+  iaScore           Decimal?  @db.Decimal(5, 2)
+  costScore         Decimal?  @db.Decimal(5, 2)
+  finalScore        Decimal?  @db.Decimal(5, 2)
+
+  // Status
+  status            String    @default("DRAFT")
+  submittedAt       DateTime?
+  confirmedAt       DateTime?
+
+  // CMS response
+  cmsAcknowledged   Boolean   @default(false)
+  cmsResponseDate   DateTime?
+  cmsResponseData   Json?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([submissionYear, submissionType])
+}
