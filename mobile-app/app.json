@@ -1,0 +1,113 @@
+{
+  "expo": {
+    "name": "PracticeFlux",
+    "slug": "practiceflux",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "practiceflux",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0891b2"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.practiceflux.app",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Use Face ID to securely log in to PracticeFlux",
+        "NSCameraUsageDescription": "Take photos of insurance cards and documents",
+        "NSPhotoLibraryUsageDescription": "Upload photos and documents from your library",
+        "NSMicrophoneUsageDescription": "Record voice messages for your care team",
+        "NSLocationWhenInUseUsageDescription": "Find nearby clinics and get directions",
+        "NSCalendarsUsageDescription": "Add appointments to your calendar",
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#0891b2"
+      },
+      "package": "com.practiceflux.app",
+      "versionCode": 1,
+      "permissions": [
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "RECORD_AUDIO",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "READ_CALENDAR",
+        "WRITE_CALENDAR"
+      ],
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-local-authentication",
+      "expo-localization",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#0891b2",
+          "sounds": [
+            "./assets/sounds/notification.wav"
+          ],
+          "mode": "production"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow PracticeFlux to access your photos to upload documents",
+          "cameraPermission": "Allow PracticeFlux to use your camera to take photos"
+        }
+      ],
+      [
+        "expo-updates",
+        {
+          "username": "practiceflux"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "updates": {
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/your-project-id"
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id"
+      }
+    },
+    "owner": "practiceflux"
+  }
+}
