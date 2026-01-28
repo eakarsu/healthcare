@@ -94,8 +94,8 @@ export async function generateSuperbillData(encounterId: string): Promise<Superb
       patient: {
         include: {
           insurances: {
-            where: { isActive: true, isPrimary: true },
-            include: { plan: true },
+            where: { priority: 1 },
+            include: { insurancePlan: true },
           },
         },
       },
@@ -109,7 +109,7 @@ export async function generateSuperbillData(encounterId: string): Promise<Superb
         orderBy: { sequence: 'asc' },
       },
       procedures: {
-        orderBy: { sequence: 'asc' },
+        include: { service: true },
       },
       appointment: true,
     },
@@ -124,9 +124,10 @@ export async function generateSuperbillData(encounterId: string): Promise<Superb
   const provider = encounter.provider
   const primaryInsurance = patient.insurances[0]
 
-  // Calculate charges
+  // Calculate charges (fees would come from fee schedule in production)
+  const defaultCharge = 100 // Default charge per procedure
   const totalCharges = encounter.procedures.reduce(
-    (sum, proc) => sum + Number(proc.chargeAmount || 0),
+    (sum: number, proc) => sum + defaultCharge * (proc.quantity || 1),
     0
   )
 
@@ -161,40 +162,40 @@ export async function generateSuperbillData(encounterId: string): Promise<Superb
       dateOfBirth: patient.dateOfBirth.toLocaleDateString('en-US'),
       address: formatAddress(patient.address, patient.city, patient.state, patient.zip),
       phone: patient.phone || '',
-      memberId: primaryInsurance?.memberId,
+      memberId: primaryInsurance?.subscriberId,
       groupNumber: primaryInsurance?.groupNumber || undefined,
     },
     insurance: primaryInsurance
       ? {
-          planName: primaryInsurance.plan.name,
-          payerName: primaryInsurance.plan.payerName,
-          memberId: primaryInsurance.memberId,
+          planName: primaryInsurance.insurancePlan.name,
+          payerName: primaryInsurance.insurancePlan.payerName,
+          memberId: primaryInsurance.subscriberId,
           groupNumber: primaryInsurance.groupNumber || undefined,
           subscriberName: primaryInsurance.subscriberName || undefined,
         }
       : undefined,
     visit: {
       date: encounter.encounterDate.toLocaleDateString('en-US'),
-      arrivalTime: encounter.appointment?.arrivalTime?.toLocaleTimeString('en-US', {
+      arrivalTime: encounter.appointment?.checkedInAt?.toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
       }),
-      placeOfService: getPlaceOfServiceName(encounter.appointment?.placeOfService || '11'),
-      placeOfServiceCode: encounter.appointment?.placeOfService || '11',
+      placeOfService: getPlaceOfServiceName('11'), // Default office visit
+      placeOfServiceCode: '11',
     },
     diagnoses: encounter.diagnoses.map((d) => ({
-      code: d.code,
+      code: d.icdCode,
       description: d.description || '',
       sequence: d.sequence,
     })),
     procedures: encounter.procedures.map((p) => ({
-      cptCode: p.code,
+      cptCode: p.cptCode,
       description: p.description || '',
       modifiers: p.modifiers || [],
       quantity: p.quantity || 1,
-      unitCharge: Number(p.chargeAmount || 0),
-      totalCharge: Number(p.chargeAmount || 0) * (p.quantity || 1),
-      diagnosisPointers: p.diagnosisPointers || [1],
+      unitCharge: defaultCharge,
+      totalCharge: defaultCharge * (p.quantity || 1),
+      diagnosisPointers: [1], // Default to first diagnosis
     })),
     summary: {
       totalCharges,

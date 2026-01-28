@@ -120,8 +120,8 @@ async function getDenominatorPatients(
   startDate: Date,
   endDate: Date
 ): Promise<string[]> {
-  // Build query based on measure criteria
-  const where: Record<string, unknown> = {}
+  // Build patient filter based on measure criteria
+  const patientFilter: Record<string, unknown> = {}
 
   // Age range filter
   if (measure.ageRange) {
@@ -131,7 +131,7 @@ async function getDenominatorPatients(
     const maxDob = new Date(today)
     maxDob.setFullYear(maxDob.getFullYear() - measure.ageRange.min)
 
-    where.dateOfBirth = {
+    patientFilter.dateOfBirth = {
       gte: minDob,
       lte: maxDob,
     }
@@ -143,7 +143,7 @@ async function getDenominatorPatients(
       providerId,
       encounterDate: { gte: startDate, lte: endDate },
       status: 'SIGNED',
-      patient: where as Parameters<typeof prisma.patient.findMany>[0]['where'],
+      ...(Object.keys(patientFilter).length > 0 ? { patient: patientFilter } : {}),
     },
     select: { patientId: true },
     distinct: ['patientId'],

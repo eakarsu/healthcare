@@ -102,6 +102,11 @@ export async function downloadDocument(
     throw new Error('Document has been deleted')
   }
 
+  // Check if encrypted path exists
+  if (!document.encryptedPath) {
+    throw new Error('Document path not found')
+  }
+
   // Check if file exists
   if (!fs.existsSync(document.encryptedPath)) {
     throw new Error('Document file not found on disk')
@@ -226,7 +231,7 @@ export async function purgeExpiredDocuments(): Promise<number> {
   for (const doc of expiredDocs) {
     try {
       // Delete file from disk
-      if (fs.existsSync(doc.encryptedPath)) {
+      if (doc.encryptedPath && fs.existsSync(doc.encryptedPath)) {
         await fs.promises.unlink(doc.encryptedPath)
       }
 

@@ -121,6 +121,14 @@ export async function POST(request: NextRequest) {
       where: { userId: session.user.id },
     })
 
+    if (!provider) {
+      return apiError('Provider not found', 404)
+    }
+
+    // Performance period dates
+    const performanceStart = new Date(year, 0, 1) // Jan 1
+    const performanceEnd = new Date(year, 11, 31) // Dec 31
+
     // Upsert patient quality measure
     const patientMeasure = await prisma.patientQualityMeasure.upsert({
       where: {
@@ -133,8 +141,10 @@ export async function POST(request: NextRequest) {
       create: {
         measureId: qualityMeasure.id,
         patientId,
-        providerId: provider?.id,
+        providerId: provider.id,
         performanceYear: year,
+        performanceStart,
+        performanceEnd,
         inDenominator: true,
         inNumerator: inNumerator ?? false,
         isExcluded: isExcluded ?? false,

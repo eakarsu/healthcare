@@ -91,10 +91,10 @@ export async function GET(
  */
 function mapClearinghouseStatusToClaimStatus(
   clearinghouseStatus: string
-): 'SUBMITTED' | 'ACCEPTED' | 'DENIED' | 'PAID' | null {
-  const statusMap: Record<string, 'SUBMITTED' | 'ACCEPTED' | 'DENIED' | 'PAID'> = {
-    ACKNOWLEDGED: 'ACCEPTED',
-    ACCEPTED: 'ACCEPTED',
+): 'SUBMITTED' | 'ACKNOWLEDGED' | 'DENIED' | 'PAID' | null {
+  const statusMap: Record<string, 'SUBMITTED' | 'ACKNOWLEDGED' | 'DENIED' | 'PAID'> = {
+    ACKNOWLEDGED: 'ACKNOWLEDGED',
+    ACCEPTED: 'ACKNOWLEDGED',
     REJECTED: 'DENIED',
     PAID: 'PAID',
   }

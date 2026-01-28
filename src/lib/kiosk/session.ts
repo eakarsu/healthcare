@@ -16,7 +16,7 @@ export interface KioskSessionData {
   demographicsUpdated: boolean
   insuranceVerified: boolean
   consentsSigned: boolean
-  copayCollected: boolean
+  copayCollected: number | null  // Amount collected, null if not collected
   paymentTransactionId?: string
   startedAt: Date
   expiresAt: Date
@@ -57,7 +57,7 @@ export async function createKioskSession(
       demographicsUpdated: false,
       insuranceVerified: false,
       consentsSigned: false,
-      copayCollected: false,
+      copayCollected: null,
     },
   })
 
@@ -70,7 +70,7 @@ export async function createKioskSession(
     demographicsUpdated: session.demographicsUpdated,
     insuranceVerified: session.insuranceVerified,
     consentsSigned: session.consentsSigned,
-    copayCollected: session.copayCollected,
+    copayCollected: session.copayCollected ? Number(session.copayCollected) : null,
     startedAt: session.startedAt,
     expiresAt,
   }
@@ -117,7 +117,7 @@ export async function getKioskSession(
     demographicsUpdated: session.demographicsUpdated,
     insuranceVerified: session.insuranceVerified,
     consentsSigned: session.consentsSigned,
-    copayCollected: session.copayCollected,
+    copayCollected: session.copayCollected ? Number(session.copayCollected) : null,
     paymentTransactionId: session.paymentTransactionId || undefined,
     startedAt: session.startedAt,
     expiresAt,
@@ -138,7 +138,7 @@ export async function updateKioskSession(
     demographicsUpdated: boolean
     insuranceVerified: boolean
     consentsSigned: boolean
-    copayCollected: boolean
+    copayCollected: number | null
     paymentTransactionId: string
     completedAt: Date
   }>
@@ -150,7 +150,10 @@ export async function updateKioskSession(
 
   const updated = await prisma.kioskSession.update({
     where: { id: session.sessionId },
-    data: updates,
+    data: {
+      ...updates,
+      copayCollected: updates.copayCollected !== undefined ? updates.copayCollected : undefined,
+    },
   })
 
   return {
@@ -164,7 +167,7 @@ export async function updateKioskSession(
     demographicsUpdated: updated.demographicsUpdated,
     insuranceVerified: updated.insuranceVerified,
     consentsSigned: updated.consentsSigned,
-    copayCollected: updated.copayCollected,
+    copayCollected: updated.copayCollected ? Number(updated.copayCollected) : null,
     paymentTransactionId: updated.paymentTransactionId || undefined,
     startedAt: updated.startedAt,
     expiresAt: session.expiresAt,
@@ -196,7 +199,7 @@ export async function completeKioskSession(
       where: { id: session.appointmentId },
       data: {
         status: 'CHECKED_IN',
-        arrivalTime: new Date(),
+        checkedInAt: new Date(),
       },
     })
   }

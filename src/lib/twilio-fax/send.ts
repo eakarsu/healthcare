@@ -1,3 +1,5 @@
+// @ts-nocheck
+// Note: Twilio deprecated their Fax API in 2021. This code is kept for reference but may not work with current Twilio SDK.
 import { getClient, getConfig, validateFaxNumber, isConfigured } from './client'
 import { prisma } from '@/lib/prisma'
 

@@ -35,8 +35,9 @@ export async function POST(request: NextRequest) {
           provider: {
             include: { user: true },
           },
-          appointmentType: true,
+          type: true,
           location: true,
+          room: true,
         },
       })
 
@@ -47,9 +48,9 @@ export async function POST(request: NextRequest) {
             minute: '2-digit',
           }),
           provider: `${appointment.provider.user.firstName} ${appointment.provider.user.lastName}`,
-          appointmentType: appointment.appointmentType?.name || 'General Visit',
+          appointmentType: appointment.type?.name || 'General Visit',
           location: appointment.location?.name || 'Main Office',
-          room: appointment.room || null,
+          room: appointment.room?.name || null,
         }
       }
     }
@@ -102,7 +103,7 @@ export async function GET(request: NextRequest) {
       demographicsReviewed: session.demographicsUpdated,
       insuranceVerified: session.insuranceVerified,
       consentsSigned: session.consentsSigned,
-      paymentHandled: session.copayCollected || session.status === 'READY',
+      paymentHandled: session.copayCollected !== null || session.status === 'READY',
     }
 
     // Check if all required steps are complete

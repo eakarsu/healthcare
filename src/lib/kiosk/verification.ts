@@ -89,7 +89,7 @@ async function verifyByNameAndDOB(
           provider: {
             include: { user: true },
           },
-          appointmentType: true,
+          type: true,
         },
         orderBy: { scheduledStart: 'asc' },
         take: 1,
@@ -101,7 +101,7 @@ async function verifyByNameAndDOB(
     return { success: false, message: 'Patient not found. Please check your information.' }
   }
 
-  const upcomingAppointment = patient.appointments[0]
+  const upcomingAppointment = patient.appointments?.[0]
 
   // If specific appointment requested, verify it matches
   if (appointmentId && (!upcomingAppointment || upcomingAppointment.id !== appointmentId)) {
@@ -131,7 +131,7 @@ async function verifyByPhoneAndDOB(
       dateOfBirth: dob,
       OR: [
         { phone: { contains: cleanPhone } },
-        { mobilePhone: { contains: cleanPhone } },
+        { mobile: { contains: cleanPhone } },
       ],
     },
     include: {
@@ -147,7 +147,7 @@ async function verifyByPhoneAndDOB(
           provider: {
             include: { user: true },
           },
-          appointmentType: true,
+          type: true,
         },
         orderBy: { scheduledStart: 'asc' },
         take: 1,
@@ -159,7 +159,7 @@ async function verifyByPhoneAndDOB(
     return { success: false, message: 'Patient not found. Please check your information.' }
   }
 
-  return buildSuccessResult(patient, patient.appointments[0])
+  return buildSuccessResult(patient, patient.appointments?.[0])
 }
 
 /**
@@ -199,7 +199,7 @@ async function verifyByLast4AndDOB(
           provider: {
             include: { user: true },
           },
-          appointmentType: true,
+          type: true,
         },
         orderBy: { scheduledStart: 'asc' },
         take: 1,
@@ -211,11 +211,11 @@ async function verifyByLast4AndDOB(
     return { success: false, message: 'Patient not found. Please check your information.' }
   }
 
-  return buildSuccessResult(patient, patient.appointments[0])
+  return buildSuccessResult(patient, patient.appointments?.[0])
 }
 
 /**
- * Verify by barcode (appointment confirmation number or patient ID)
+ * Verify by barcode (appointment ID or patient ID)
  */
 async function verifyByBarcode(
   request: VerificationRequest
@@ -226,13 +226,10 @@ async function verifyByBarcode(
     return { success: false, message: 'Barcode is required' }
   }
 
-  // Try to find appointment by confirmation code
+  // Try to find appointment by ID
   const appointment = await prisma.appointment.findFirst({
     where: {
-      OR: [
-        { id: barcode },
-        { confirmationCode: barcode },
-      ],
+      id: barcode,
       scheduledStart: {
         gte: new Date(),
         lte: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -243,7 +240,7 @@ async function verifyByBarcode(
       provider: {
         include: { user: true },
       },
-      appointmentType: true,
+      type: true,
     },
   })
 
@@ -267,7 +264,7 @@ async function verifyByBarcode(
           provider: {
             include: { user: true },
           },
-          appointmentType: true,
+          type: true,
         },
         orderBy: { scheduledStart: 'asc' },
         take: 1,
@@ -276,7 +273,7 @@ async function verifyByBarcode(
   })
 
   if (patient) {
-    return buildSuccessResult(patient, patient.appointments[0])
+    return buildSuccessResult(patient, patient.appointments?.[0])
   }
 
   return { success: false, message: 'Invalid barcode. Please try again.' }
@@ -296,7 +293,7 @@ function buildSuccessResult(
     id: string
     scheduledStart: Date
     provider: { user: { firstName: string; lastName: string } }
-    appointmentType: { name: string } | null
+    type: { name: string } | null
   }
 ): VerificationResult {
   return {
@@ -314,7 +311,7 @@ function buildSuccessResult(
       ? {
           id: appointment.id,
           scheduledStart: appointment.scheduledStart,
-          appointmentType: appointment.appointmentType?.name || 'General Visit',
+          appointmentType: appointment.type?.name || 'General Visit',
           provider: `${appointment.provider.user.firstName} ${appointment.provider.user.lastName}`,
         }
       : undefined,

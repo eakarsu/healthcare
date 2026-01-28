@@ -43,7 +43,6 @@ export async function POST(request: NextRequest) {
             user: true,
           },
         },
-        medication: true,
       },
     })
 
@@ -52,13 +51,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if already sent
-    if (prescription.prescriptionStatus === 'SENT_TO_PHARMACY') {
+    if (prescription.status === 'SENT') {
       return apiError('Prescription has already been sent to pharmacy', 400)
     }
 
     // Determine if controlled substance
-    const isControlledSubstance = prescription.medication?.schedule !== null &&
-      ['II', 'III', 'IV', 'V'].includes(prescription.medication?.schedule || '')
+    const isControlledSubstance = prescription.isControlled &&
+      ['II', 'III', 'IV', 'V'].includes(prescription.scheduleClass || '')
+
+    // Build directions from dosage and frequency
+    const directions = `${prescription.dosage} ${prescription.frequency}${prescription.route ? ` via ${prescription.route}` : ''}`
 
     // Send prescription
     const result = await sendPrescription({
@@ -66,17 +68,17 @@ export async function POST(request: NextRequest) {
       providerId: prescription.providerId,
       patientId: prescription.patientId,
       pharmacyNcpdpId,
-      drugName: prescription.medication?.name || prescription.medicationName || '',
-      drugNdc: prescription.medication?.ndc || undefined,
-      quantity: prescription.quantity || '',
+      drugName: prescription.drugName,
+      drugNdc: prescription.drugCode || undefined,
+      quantity: String(prescription.quantity),
       quantityUnit: prescription.quantityUnit || 'EA',
-      daysSupply: prescription.daysSupply || 30,
-      directions: prescription.directions || '',
+      daysSupply: 30, // Default days supply
+      directions,
       refills: prescription.refills || 0,
       notes: prescription.notes || undefined,
       isControlledSubstance,
-      schedule: prescription.medication?.schedule || undefined,
-      substitutionAllowed: prescription.substitutionAllowed ?? true,
+      schedule: prescription.scheduleClass || undefined,
+      substitutionAllowed: !prescription.dispenseAsWritten,
     })
 
     if (!result.success) {

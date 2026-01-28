@@ -51,7 +51,7 @@ export async function GET(
     })
 
     // Return file as response
-    return new Response(document.fileContent, {
+    return new Response(new Uint8Array(document.fileContent), {
       status: 200,
       headers: {
         'Content-Type': document.mimeType,

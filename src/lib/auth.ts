@@ -166,7 +166,6 @@ export const authOptions: NextAuthOptions = {
               action: 'USER_CREATED',
               entity: 'User',
               entityId: dbUser.id,
-              details: { provider: account.provider },
             })
           }
 
@@ -181,7 +180,6 @@ export const authOptions: NextAuthOptions = {
             action: 'LOGIN',
             entity: 'User',
             entityId: dbUser.id,
-            details: { provider: account.provider },
           })
 
           return true

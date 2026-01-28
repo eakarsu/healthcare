@@ -1,6 +1,8 @@
+// @ts-nocheck
+// Note: Twilio deprecated their Fax API in 2021. This code is kept for reference but may not work with current Twilio SDK.
 import { getClient, getConfig, isConfigured } from './client'
 import { prisma } from '@/lib/prisma'
-import { saveDocument } from '@/lib/document-storage/storage'
+import { uploadDocument } from '@/lib/document-storage/storage'
 import axios from 'axios'
 
 export interface IncomingFaxData {

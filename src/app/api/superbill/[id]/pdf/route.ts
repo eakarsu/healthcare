@@ -47,8 +47,9 @@ export async function GET(
     superbillData.superbillNumber = superbill.superbillNumber
 
     // Generate PDF
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pdfBuffer = await renderToBuffer(
-      createElement(SuperbillPDF, { data: superbillData })
+      createElement(SuperbillPDF, { data: superbillData }) as any
     )
 
     // Update superbill with print timestamp
@@ -71,7 +72,7 @@ export async function GET(
     })
 
     // Return PDF
-    return new Response(pdfBuffer, {
+    return new Response(new Uint8Array(pdfBuffer), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="superbill-${superbill.superbillNumber}.pdf"`,
@@ -118,8 +119,9 @@ export async function POST(
     superbillData.superbillNumber = superbill.superbillNumber
 
     // Generate PDF
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pdfBuffer = await renderToBuffer(
-      createElement(SuperbillPDF, { data: superbillData })
+      createElement(SuperbillPDF, { data: superbillData }) as any
     )
 
     // Save PDF to document storage

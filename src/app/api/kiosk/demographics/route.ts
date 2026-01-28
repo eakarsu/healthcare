@@ -32,11 +32,11 @@ export async function GET(request: NextRequest) {
         state: true,
         zip: true,
         phone: true,
-        mobilePhone: true,
+        mobile: true,
         email: true,
-        emergencyContactName: true,
-        emergencyContactPhone: true,
-        emergencyContactRelation: true,
+        emergencyName: true,
+        emergencyPhone: true,
+        emergencyRelation: true,
       },
     })
 
@@ -79,11 +79,11 @@ export async function PUT(request: NextRequest) {
       state,
       zip,
       phone,
-      mobilePhone,
+      mobile,
       email,
-      emergencyContactName,
-      emergencyContactPhone,
-      emergencyContactRelation,
+      emergencyName,
+      emergencyPhone,
+      emergencyRelation,
       noChanges, // If patient confirms no changes needed
     } = body
 
@@ -97,11 +97,11 @@ export async function PUT(request: NextRequest) {
           state,
           zip,
           phone,
-          mobilePhone,
+          mobile,
           email,
-          emergencyContactName,
-          emergencyContactPhone,
-          emergencyContactRelation,
+          emergencyName,
+          emergencyPhone,
+          emergencyRelation,
         },
       })
     }

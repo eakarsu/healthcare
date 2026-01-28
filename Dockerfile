@@ -1,11 +1,15 @@
 FROM node:20-slim
 
-RUN apt-get update && apt-get install -y \
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     bash \
     postgresql \
     postgresql-contrib \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Setup PostgreSQL
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \

@@ -15,7 +15,7 @@ export async function POST(
 
     const { id: locationId } = await params
     const body = await request.json()
-    const { name } = body
+    const { name, type = 'Exam' } = body
 
     if (!name) {
       return apiError('Room name is required', 400)
@@ -37,6 +37,7 @@ export async function POST(
       data: {
         locationId,
         name,
+        type,
         isActive: true,
       },
     })

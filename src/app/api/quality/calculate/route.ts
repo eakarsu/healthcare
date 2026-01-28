@@ -133,6 +133,10 @@ async function storePatientMeasures(
     })
   }
 
+  // Performance period dates
+  const performanceStart = new Date(performanceYear, 0, 1) // Jan 1
+  const performanceEnd = new Date(performanceYear, 11, 31) // Dec 31
+
   // Update patient measures for gap patients (not in numerator)
   for (const patientId of result.gapPatients) {
     await prisma.patientQualityMeasure.upsert({
@@ -148,6 +152,8 @@ async function storePatientMeasures(
         patientId,
         providerId,
         performanceYear,
+        performanceStart,
+        performanceEnd,
         inDenominator: true,
         inNumerator: false,
         autoCalculated: true,

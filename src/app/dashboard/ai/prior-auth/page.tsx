@@ -108,6 +108,7 @@ export default function PriorAuthPage() {
 
   const loadSampleData = () => {
     setFormData({
+      patientId: '',
       patientName: 'John Smith',
       insurancePlan: 'bcbs',
       procedureCode: '27447',

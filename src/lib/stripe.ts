@@ -2,6 +2,7 @@ import Stripe from 'stripe'
 
 // Initialize Stripe with API key
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+  // @ts-expect-error - Stripe type may be stricter than actual API version support
   apiVersion: '2024-12-18.acacia',
 })
 

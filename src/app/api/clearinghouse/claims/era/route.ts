@@ -99,12 +99,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine claim status based on payment
-    let claimStatus: 'PAID' | 'DENIED' | 'PARTIALLY_PAID' = 'PAID'
+    let claimStatus: 'PAID' | 'DENIED' | 'PARTIAL' = 'PAID'
     if (totalPaid === 0) {
       claimStatus = 'DENIED'
     } else if (totalPaid < Number(submission.claim.totalCharges) * 0.9) {
       // Less than 90% paid might indicate partial payment
-      claimStatus = 'PARTIALLY_PAID'
+      claimStatus = 'PARTIAL'
     }
 
     // Update the claim
@@ -131,12 +131,11 @@ export async function POST(request: NextRequest) {
       await prisma.claimPayment.create({
         data: {
           claimId: submission.claimId,
-          paymentType: 'INSURANCE',
+          payerType: 'Insurance',
           amount: totalPaid,
           paymentDate: checkDate ? new Date(checkDate) : new Date(),
-          referenceNumber: checkNumber,
-          payerName: payerName || 'Insurance',
-          notes: `ERA received - Check #${checkNumber}`,
+          checkNumber: checkNumber,
+          reference: `ERA - ${payerName || 'Insurance'}`,
         },
       })
     }

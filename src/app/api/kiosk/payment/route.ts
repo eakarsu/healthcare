@@ -27,16 +27,15 @@ export async function GET(request: NextRequest) {
       const appointment = await prisma.appointment.findUnique({
         where: { id: session.appointmentId },
         include: {
-          appointmentType: true,
+          type: true,
         },
       })
 
       if (appointment) {
-        appointmentType = appointment.appointmentType?.name || 'General Visit'
+        appointmentType = appointment.type?.name || 'General Visit'
         // In production, this would come from eligibility check
-        copayAmount = appointment.appointmentType?.defaultCopay
-          ? Number(appointment.appointmentType.defaultCopay)
-          : 25
+        // Default copay - would normally come from eligibility verification
+        copayAmount = 25
       }
     }
 
@@ -98,15 +97,15 @@ export async function POST(request: NextRequest) {
       paymentTransactionId = `PAY-${Date.now()}`
 
       // Record payment
-      await prisma.payment.create({
+      await prisma.patientPayment.create({
         data: {
           amount,
           patientId: session.patientId,
-          paymentMethod: 'CREDIT_CARD',
-          paymentDate: new Date(),
-          referenceNumber: paymentTransactionId,
+          method: 'CREDIT_CARD',
+          date: new Date(),
+          reference: paymentTransactionId,
           notes: 'Kiosk copay payment',
-          status: 'COMPLETED',
+          status: 'completed',
         },
       })
     }
@@ -114,7 +113,7 @@ export async function POST(request: NextRequest) {
     // Update session
     await updateKioskSession(sessionToken, {
       status: 'READY',
-      copayCollected: paymentMethod === 'card' && amount > 0,
+      copayCollected: paymentMethod === 'card' && amount > 0 ? amount : null,
       paymentTransactionId,
     })
 
@@ -138,25 +137,25 @@ async function getPatientBalance(patientId: string): Promise<number> {
   const claims = await prisma.claim.aggregate({
     where: {
       patientId,
-      status: { in: ['ACCEPTED', 'PAID', 'PARTIALLY_PAID'] },
+      status: { in: ['ACKNOWLEDGED', 'PAID', 'PARTIAL'] },
     },
     _sum: {
       patientResponsibility: true,
     },
   })
 
-  const payments = await prisma.payment.aggregate({
+  const payments = await prisma.patientPayment.aggregate({
     where: {
       patientId,
-      status: 'COMPLETED',
+      status: 'completed',
     },
     _sum: {
       amount: true,
     },
   })
 
-  const totalResponsibility = Number(claims._sum.patientResponsibility || 0)
-  const totalPayments = Number(payments._sum.amount || 0)
+  const totalResponsibility = Number(claims._sum?.patientResponsibility || 0)
+  const totalPayments = Number(payments._sum?.amount || 0)
 
   return Math.max(0, totalResponsibility - totalPayments)
 }

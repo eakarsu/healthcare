@@ -84,7 +84,7 @@ export async function POST(
         middleName: patient.middleName || undefined,
         dateOfBirth: patient.dateOfBirth.toISOString().split('T')[0],
         gender: (patient.gender?.charAt(0).toUpperCase() as 'M' | 'F' | 'U') || 'U',
-        memberId: insurance.memberId,
+        memberId: insurance.subscriberId,
         address: patient.address || '',
         city: patient.city || '',
         state: patient.state || '',
@@ -103,11 +103,11 @@ export async function POST(
         payerId: insurancePlan.payerId || insurancePlan.electronicPayerId || '',
         payerName: insurancePlan.payerName,
         groupNumber: insurance.groupNumber || undefined,
-        subscriberId: insurance.memberId,
+        subscriberId: insurance.subscriberId,
         relationshipCode: mapRelationshipCode(insurance.relationship),
       },
       diagnoses: existingClaim.encounter!.diagnoses.map((d, index) => ({
-        code: d.code,
+        code: d.icdCode,
         sequence: index + 1,
       })),
       procedures: existingClaim.lines.map((line) => ({

@@ -74,9 +74,9 @@ export async function POST(request: NextRequest) {
             networkStatus: result.networkStatus,
             coinsurance: result.coinsurance,
           },
-          copayInfo: result.copay,
-          deductibleInfo: result.deductible,
-          outOfPocketInfo: result.outOfPocket,
+          copayInfo: JSON.parse(JSON.stringify(result.copay)),
+          deductibleInfo: JSON.parse(JSON.stringify(result.deductible)),
+          outOfPocketInfo: JSON.parse(JSON.stringify(result.outOfPocket)),
           expiresAt,
         },
       })

@@ -172,17 +172,17 @@ export function patientToFHIR(patient: {
   mrn: string
   firstName: string
   lastName: string
-  middleName?: string
+  middleName?: string | null
   dateOfBirth: Date
   gender: string
-  email?: string
-  phone?: string
-  mobile?: string
-  address?: string
-  city?: string
-  state?: string
-  zip?: string
-  preferredLanguage?: string
+  email?: string | null
+  phone?: string | null
+  mobile?: string | null
+  address?: string | null
+  city?: string | null
+  state?: string | null
+  zip?: string | null
+  preferredLanguage?: string | null
 }): FHIRPatient {
   const fhirPatient: FHIRPatient = {
     resourceType: 'Patient',
@@ -244,9 +244,9 @@ export function patientToFHIR(patient: {
     fhirPatient.address!.push({
       use: 'home',
       line: patient.address ? [patient.address] : undefined,
-      city: patient.city,
-      state: patient.state,
-      postalCode: patient.zip,
+      city: patient.city || undefined,
+      state: patient.state || undefined,
+      postalCode: patient.zip || undefined,
       country: 'US'
     })
   }
@@ -373,6 +373,11 @@ export function allergyToFHIR(allergy: {
     },
     criticality: mapSeverityToCriticality(allergy.severity),
     code: {
+      coding: [{
+        system: 'http://snomed.info/sct',
+        code: 'unknown',
+        display: allergy.allergen
+      }],
       text: allergy.allergen
     },
     patient: { reference: `Patient/${allergy.patientId}` },
@@ -407,6 +412,11 @@ export function medicationToFHIR(medication: {
     id: medication.id,
     status: medication.status === 'active' ? 'active' : 'completed',
     medicationCodeableConcept: {
+      coding: [{
+        system: 'http://www.nlm.nih.gov/research/umls/rxnorm',
+        code: 'unknown',
+        display: medication.name
+      }],
       text: medication.name
     },
     subject: { reference: `Patient/${medication.patientId}` },

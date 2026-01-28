@@ -88,8 +88,8 @@ export async function sendPrescription(
     await prisma.prescription.update({
       where: { id: prescriptionId },
       data: {
-        prescriptionStatus: 'SENT_TO_PHARMACY',
-        pharmacyNcpdpId,
+        status: 'SENT',
+        pharmacyNpi: pharmacyNcpdpId,
       },
     })
 
@@ -108,7 +108,7 @@ export async function sendPrescription(
       messageType: 'NewRx',
       prescriber: {
         npi: prescription.provider.npi,
-        dea: prescription.provider.deaNumber,
+        dea: prescription.deaNumber, // DEA stored on prescription for controlled substances
         firstName: prescription.provider.user.firstName,
         lastName: prescription.provider.user.lastName,
         address: prescription.provider.practice.address,
@@ -174,8 +174,8 @@ export async function sendPrescription(
     await prisma.prescription.update({
       where: { id: prescriptionId },
       data: {
-        prescriptionStatus: status === 'ACCEPTED' ? 'SENT_TO_PHARMACY' : 'PENDING',
-        pharmacyNcpdpId,
+        status: status === 'ACCEPTED' ? 'SENT' : 'READY_TO_SEND',
+        pharmacyNpi: pharmacyNcpdpId,
       },
     })
 
@@ -216,7 +216,7 @@ export async function cancelPrescription(
   const prescription = await prisma.prescription.findUnique({
     where: { id: prescriptionId },
     include: {
-      drFirstTransactions: {
+      drfirstTransactions: {
         where: { transactionType: 'NEW_PRESCRIPTION', status: 'SENT' },
         orderBy: { sentAt: 'desc' },
         take: 1,
@@ -228,7 +228,7 @@ export async function cancelPrescription(
     return { success: false, errorMessage: 'Prescription not found' }
   }
 
-  if (!prescription.pharmacyNcpdpId) {
+  if (!prescription.pharmacyNpi) {
     return { success: false, errorMessage: 'Prescription was not sent to a pharmacy' }
   }
 
@@ -248,7 +248,7 @@ export async function cancelPrescription(
 
     await prisma.prescription.update({
       where: { id: prescriptionId },
-      data: { prescriptionStatus: 'CANCELLED' },
+      data: { status: 'CANCELLED' },
     })
 
     return {
@@ -262,9 +262,9 @@ export async function cancelPrescription(
     const client = await getClient()
 
     const response = await client.post('/erx/cancel', {
-      originalTransactionId: prescription.drFirstTransactions[0]?.transactionId,
+      originalTransactionId: prescription.drfirstTransactions[0]?.transactionId,
       prescriptionId,
-      pharmacyNcpdpId: prescription.pharmacyNcpdpId,
+      pharmacyNcpdpId: prescription.pharmacyNpi,
       cancelReason: reason,
     })
 
@@ -284,7 +284,7 @@ export async function cancelPrescription(
     if (status === 'ACCEPTED' || status === 'SENT') {
       await prisma.prescription.update({
         where: { id: prescriptionId },
-        data: { prescriptionStatus: 'CANCELLED' },
+        data: { status: 'CANCELLED' },
       })
     }
 

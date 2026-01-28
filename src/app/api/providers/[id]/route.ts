@@ -139,15 +139,9 @@ export async function DELETE(
       return apiError('Provider not found', 404)
     }
 
-    // Soft delete by deactivating the user
+    // Soft delete by deactivating the user (provider status is managed through user)
     await prisma.user.update({
       where: { id: existingProvider.userId },
-      data: { isActive: false },
-    })
-
-    // Also deactivate the provider
-    await prisma.provider.update({
-      where: { id },
       data: { isActive: false },
     })
 

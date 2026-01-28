@@ -32,10 +32,14 @@ export async function POST(
       where: { id },
       include: {
         patient: true,
-        provider: {
+        encounter: {
           include: {
-            user: true,
-            practice: true,
+            provider: {
+              include: {
+                user: true,
+                practice: true,
+              },
+            },
           },
         },
       },
@@ -44,6 +48,9 @@ export async function POST(
     if (!superbill) {
       return apiError('Superbill not found', 404)
     }
+
+    // Get provider from encounter
+    const provider = superbill.encounter.provider
 
     // Get email address
     const toEmail = customEmail || superbill.patient.email
@@ -60,12 +67,13 @@ export async function POST(
     superbillData.superbillNumber = superbill.superbillNumber
 
     // Generate PDF
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pdfBuffer = await renderToBuffer(
-      createElement(SuperbillPDF, { data: superbillData })
+      createElement(SuperbillPDF, { data: superbillData }) as any
     )
 
     // Prepare email
-    const practice = superbill.provider.practice
+    const practice = provider.practice
     const emailSubject = subject || `Your Visit Summary - ${superbill.superbillNumber}`
     const emailMessage = message || getDefaultEmailMessage(
       superbill.patient.firstName,
