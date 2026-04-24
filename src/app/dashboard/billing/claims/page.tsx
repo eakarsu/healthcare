@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
   TableBody,
@@ -28,7 +30,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { FileText, Plus, Search, Filter, Calendar, DollarSign, Building2, User } from 'lucide-react'
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
+import { TableSkeleton } from '@/components/ui/loading-skeleton'
+import { useToast } from '@/components/ui/use-toast'
+import { FileText, Plus, Search, Filter, Calendar, DollarSign, Building2, User, Trash2, Edit, RefreshCw } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 interface Claim {
@@ -46,6 +51,8 @@ interface Claim {
 }
 
 export default function ClaimsPage() {
+  const router = useRouter()
+  const { toast } = useToast()
   const [claims, setClaims] = useState<Claim[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -53,6 +60,17 @@ export default function ClaimsPage() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [selectedClaim, setSelectedClaim] = useState<Claim | null>(null)
+
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false)
+  const [bulkUpdateStatus, setBulkUpdateStatus] = useState('')
+  const [bulkLoading, setBulkLoading] = useState(false)
+
+  // Single delete
+  const [deleteTarget, setDeleteTarget] = useState<Claim | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   useEffect(() => {
     fetchClaims()
@@ -65,41 +83,25 @@ export default function ClaimsPage() {
         page: page.toString(),
         limit: '20',
       })
-      if (statusFilter !== 'all') {
-        params.append('status', statusFilter)
-      }
-      if (search) {
-        params.append('search', search)
-      }
+      if (statusFilter !== 'all') params.append('status', statusFilter)
+      if (search) params.append('search', search)
 
       const response = await fetch(`/api/claims?${params}`)
       if (response.ok) {
         const data = await response.json()
-        // API returns { claims: [...], total, page, limit, totalPages }
         const claimsList = data.claims || []
         setClaims(claimsList.map((c: {
-          id: string
-          claimNumber: string
-          status: string
-          totalCharges: number
-          paidAmount: number
-          adjustmentAmount: number
-          serviceDate: string
-          submittedDate: string | null
-          patient: { firstName: string; lastName: string; mrn: string }
+          id: string; claimNumber: string; status: string; totalCharges: number;
+          paidAmount: number; adjustmentAmount: number; serviceDate: string;
+          submittedDate: string | null; patient: { firstName: string; lastName: string; mrn: string };
           insurancePlan: { name: string; payerName: string } | null
         }) => ({
-          id: c.id,
-          claimNumber: c.claimNumber,
-          status: c.status,
-          totalCharge: Number(c.totalCharges) || 0,
-          totalPaid: Number(c.paidAmount) || 0,
+          id: c.id, claimNumber: c.claimNumber, status: c.status,
+          totalCharge: Number(c.totalCharges) || 0, totalPaid: Number(c.paidAmount) || 0,
           totalAdjustment: Number(c.adjustmentAmount) || 0,
           balance: (Number(c.totalCharges) || 0) - (Number(c.paidAmount) || 0) - (Number(c.adjustmentAmount) || 0),
-          serviceDate: c.serviceDate,
-          submittedDate: c.submittedDate,
-          patient: c.patient,
-          insurancePlan: c.insurancePlan,
+          serviceDate: c.serviceDate, submittedDate: c.submittedDate,
+          patient: c.patient, insurancePlan: c.insurancePlan,
         })))
         setTotalPages(data.totalPages || 1)
       }
@@ -116,18 +118,100 @@ export default function ClaimsPage() {
     fetchClaims()
   }
 
+  const toggleSelect = (id: string) => {
+    const next = new Set(selectedIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedIds(next)
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === claims.length) setSelectedIds(new Set())
+    else setSelectedIds(new Set(claims.map(c => c.id)))
+  }
+
+  const handleBulkDelete = async () => {
+    setBulkLoading(true)
+    try {
+      const response = await fetch('/api/claims/bulk', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      })
+      const data = await response.json()
+      if (response.ok) {
+        toast({ title: 'Success', description: data.message })
+        setSelectedIds(new Set())
+        fetchClaims()
+      } else {
+        toast({ title: 'Error', description: data.error, variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to void claims', variant: 'destructive' })
+    } finally {
+      setBulkLoading(false)
+      setBulkDeleteOpen(false)
+    }
+  }
+
+  const handleBulkUpdate = async () => {
+    if (!bulkUpdateStatus) return
+    setBulkLoading(true)
+    try {
+      const response = await fetch('/api/claims/bulk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds), data: { status: bulkUpdateStatus } }),
+      })
+      const data = await response.json()
+      if (response.ok) {
+        toast({ title: 'Success', description: data.message })
+        setSelectedIds(new Set())
+        setBulkUpdateStatus('')
+        fetchClaims()
+      } else {
+        toast({ title: 'Error', description: data.error, variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to update claims', variant: 'destructive' })
+    } finally {
+      setBulkLoading(false)
+      setBulkUpdateOpen(false)
+    }
+  }
+
+  const handleSingleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleteLoading(true)
+    try {
+      const response = await fetch('/api/claims/bulk', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [deleteTarget.id] }),
+      })
+      if (response.ok) {
+        toast({ title: 'Success', description: 'Claim voided successfully' })
+        setDeleteTarget(null)
+        setSelectedClaim(null)
+        fetchClaims()
+      } else {
+        const data = await response.json()
+        toast({ title: 'Error', description: data.error, variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to void claim', variant: 'destructive' })
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      CREATED: 'bg-gray-100 text-gray-800',
-      VALIDATED: 'bg-blue-100 text-blue-800',
-      SUBMITTED: 'bg-indigo-100 text-indigo-800',
-      ACKNOWLEDGED: 'bg-cyan-100 text-cyan-800',
-      PENDING: 'bg-yellow-100 text-yellow-800',
-      PAID: 'bg-green-100 text-green-800',
-      PARTIAL: 'bg-lime-100 text-lime-800',
-      DENIED: 'bg-red-100 text-red-800',
-      APPEALED: 'bg-orange-100 text-orange-800',
-      VOID: 'bg-slate-100 text-slate-800',
+      CREATED: 'bg-gray-100 text-gray-800', VALIDATED: 'bg-blue-100 text-blue-800',
+      SUBMITTED: 'bg-indigo-100 text-indigo-800', ACKNOWLEDGED: 'bg-cyan-100 text-cyan-800',
+      PENDING: 'bg-yellow-100 text-yellow-800', PAID: 'bg-green-100 text-green-800',
+      PARTIAL: 'bg-lime-100 text-lime-800', DENIED: 'bg-red-100 text-red-800',
+      APPEALED: 'bg-orange-100 text-orange-800', VOID: 'bg-slate-100 text-slate-800',
     }
     return colors[status] || 'bg-gray-100 text-gray-800'
   }
@@ -160,7 +244,7 @@ export default function ClaimsPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1) }}>
               <SelectTrigger className="w-40">
                 <Filter className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="Status" />
@@ -180,6 +264,32 @@ export default function ClaimsPage() {
             </Select>
             <Button type="submit">Search</Button>
           </form>
+
+          {/* Bulk Actions Bar */}
+          {selectedIds.size > 0 && (
+            <div className="mt-4 flex items-center gap-3 rounded-lg bg-teal-50 border border-teal-200 p-3">
+              <span className="text-sm font-medium text-teal-800">
+                {selectedIds.size} claim{selectedIds.size > 1 ? 's' : ''} selected
+              </span>
+              <div className="flex gap-2 ml-auto">
+                <Button variant="outline" size="sm" onClick={() => setBulkUpdateOpen(true)}>
+                  <RefreshCw className="mr-1 h-3 w-3" />
+                  Bulk Update
+                </Button>
+                <Button
+                  variant="outline" size="sm"
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                  onClick={() => setBulkDeleteOpen(true)}
+                >
+                  <Trash2 className="mr-1 h-3 w-3" />
+                  Void Selected
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -190,9 +300,7 @@ export default function ClaimsPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex h-64 items-center justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-teal-600 border-t-transparent" />
-            </div>
+            <TableSkeleton rows={8} columns={9} />
           ) : claims.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center text-gray-500">
               <FileText className="mb-4 h-12 w-12 text-gray-300" />
@@ -203,6 +311,12 @@ export default function ClaimsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[40px]">
+                      <Checkbox
+                        checked={selectedIds.size === claims.length && claims.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
                     <TableHead>Claim #</TableHead>
                     <TableHead>Patient</TableHead>
                     <TableHead>Service Date</TableHead>
@@ -211,7 +325,6 @@ export default function ClaimsPage() {
                     <TableHead className="text-right">Paid</TableHead>
                     <TableHead className="text-right">Balance</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -221,6 +334,12 @@ export default function ClaimsPage() {
                       className="cursor-pointer hover:bg-gray-50"
                       onClick={() => setSelectedClaim(claim)}
                     >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.has(claim.id)}
+                          onCheckedChange={() => toggleSelect(claim.id)}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">{claim.claimNumber}</TableCell>
                       <TableCell>
                         <div>
@@ -241,42 +360,22 @@ export default function ClaimsPage() {
                       </TableCell>
                       <TableCell className="text-right">{formatCurrency(claim.totalCharge)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(claim.totalPaid)}</TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(claim.balance)}
-                      </TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrency(claim.balance)}</TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(claim.status)}>{claim.status}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/dashboard/billing/claims/${claim.id}`}>View</Link>
-                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
 
-              {/* Pagination */}
               <div className="mt-4 flex items-center justify-between">
-                <p className="text-sm text-gray-500">
-                  Page {page} of {totalPages}
-                </p>
+                <p className="text-sm text-gray-500">Page {page} of {totalPages}</p>
                 <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
                     Previous
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page === totalPages}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
                     Next
                   </Button>
                 </div>
@@ -286,7 +385,7 @@ export default function ClaimsPage() {
         </CardContent>
       </Card>
 
-      {/* Claim Detail Dialog */}
+      {/* Claim Detail Dialog with Edit/Delete */}
       <Dialog open={!!selectedClaim} onOpenChange={(open) => !open && setSelectedClaim(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -379,20 +478,85 @@ export default function ClaimsPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="outline" onClick={() => setSelectedClaim(null)}>
-                  Close
+              <div className="flex justify-between gap-3 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                  onClick={() => setDeleteTarget(selectedClaim)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Void
                 </Button>
-                <Button className="bg-teal-600 hover:bg-teal-700 active:bg-teal-800" asChild>
-                  <Link href={`/dashboard/billing/claims/${selectedClaim.id}`}>
-                    View Full Details
-                  </Link>
-                </Button>
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => router.push(`/dashboard/billing/claims/${selectedClaim.id}`)}>
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit
+                  </Button>
+                  <Button className="bg-teal-600 hover:bg-teal-700 active:bg-teal-800" asChild>
+                    <Link href={`/dashboard/billing/claims/${selectedClaim.id}`}>
+                      View Full Details
+                    </Link>
+                  </Button>
+                </div>
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Delete Confirmation */}
+      <ConfirmationDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title="Void Selected Claims"
+        description={`Are you sure you want to void ${selectedIds.size} claim${selectedIds.size > 1 ? 's' : ''}? This cannot be undone.`}
+        confirmLabel="Void All"
+        variant="danger"
+        loading={bulkLoading}
+        onConfirm={handleBulkDelete}
+      />
+
+      {/* Bulk Update Dialog */}
+      <Dialog open={bulkUpdateOpen} onOpenChange={setBulkUpdateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Bulk Update Claims</DialogTitle>
+            <DialogDescription>
+              Update status for {selectedIds.size} selected claim{selectedIds.size > 1 ? 's' : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Select value={bulkUpdateStatus} onValueChange={setBulkUpdateStatus}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select new status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="SUBMITTED">Submitted</SelectItem>
+                <SelectItem value="PENDING">Pending</SelectItem>
+                <SelectItem value="APPEALED">Appealed</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setBulkUpdateOpen(false)}>Cancel</Button>
+              <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleBulkUpdate} disabled={!bulkUpdateStatus || bulkLoading}>
+                {bulkLoading ? 'Updating...' : 'Update All'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Single Delete Confirmation */}
+      <ConfirmationDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Void Claim"
+        description={`Are you sure you want to void claim #${deleteTarget?.claimNumber}?`}
+        confirmLabel="Void"
+        variant="danger"
+        loading={deleteLoading}
+        onConfirm={handleSingleDelete}
+      />
     </div>
   )
 }

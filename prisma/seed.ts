@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma, Specialty, UserRole, Gender, PatientStatus, Severity, AppointmentStatus, EncounterStatus, ClaimStatus, PaymentMethod, ConsentType, DocumentType, OrderType, LabOrderStatus } from '@prisma/client'
+import { PrismaClient, Prisma, Specialty, UserRole, Gender, PatientStatus, Severity, AppointmentStatus, EncounterStatus, ClaimStatus, PaymentMethod, ConsentType, DocumentType, OrderType, LabOrderStatus, PriorAuthStatus, CommunicationType } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
@@ -418,6 +418,14 @@ async function main() {
     { id: 'apt-type-6', name: 'Consultation', duration: 30, color: '#14b8a6', code: 'CONSULT' },
     { id: 'apt-type-7', name: 'Telehealth', duration: 30, color: '#64748b', code: 'TELE' },
     { id: 'apt-type-8', name: 'Urgent', duration: 15, color: '#dc2626', code: 'URG' },
+    { id: 'apt-type-9', name: 'Well Child Visit', duration: 30, color: '#f472b6', code: 'WCV' },
+    { id: 'apt-type-10', name: 'Pre-Op Evaluation', duration: 45, color: '#a78bfa', code: 'PREOP' },
+    { id: 'apt-type-11', name: 'Post-Op Follow-up', duration: 30, color: '#fb923c', code: 'POSTOP' },
+    { id: 'apt-type-12', name: 'Immunization Only', duration: 15, color: '#4ade80', code: 'IMMUN' },
+    { id: 'apt-type-13', name: 'Lab Review', duration: 15, color: '#38bdf8', code: 'LABR' },
+    { id: 'apt-type-14', name: 'Mental Health', duration: 60, color: '#c084fc', code: 'MH' },
+    { id: 'apt-type-15', name: 'Chronic Care Mgmt', duration: 30, color: '#facc15', code: 'CCM' },
+    { id: 'apt-type-16', name: 'Worker Comp Eval', duration: 45, color: '#94a3b8', code: 'WC' },
   ]
 
   for (const type of appointmentTypes) {
@@ -439,6 +447,14 @@ async function main() {
     { id: 'ins-6', name: 'Medicaid', payerName: 'Medicaid', planType: 'Government', payerId: 'MDCD001' },
     { id: 'ins-7', name: 'Humana PPO', payerName: 'Humana', planType: 'PPO', payerId: 'HUM001' },
     { id: 'ins-8', name: 'Self-Pay', payerName: 'Self-Pay', planType: 'Self', payerId: null },
+    { id: 'ins-9', name: 'Kaiser Permanente HMO', payerName: 'Kaiser Permanente', planType: 'HMO', payerId: 'KAISER001' },
+    { id: 'ins-10', name: 'Anthem Blue Cross PPO', payerName: 'Anthem Blue Cross', planType: 'PPO', payerId: 'ANTHEM001' },
+    { id: 'ins-11', name: 'HealthNet HMO', payerName: 'HealthNet', planType: 'HMO', payerId: 'HNET001' },
+    { id: 'ins-12', name: 'Tricare Standard', payerName: 'Tricare', planType: 'Government', payerId: 'TRICARE001' },
+    { id: 'ins-13', name: 'Molina Healthcare', payerName: 'Molina', planType: 'HMO', payerId: 'MOLINA001' },
+    { id: 'ins-14', name: 'WellCare PPO', payerName: 'WellCare', planType: 'PPO', payerId: 'WCARE001' },
+    { id: 'ins-15', name: 'Centene Medicare Advantage', payerName: 'Centene', planType: 'Government', payerId: 'CENT001' },
+    { id: 'ins-16', name: 'Oscar Health EPO', payerName: 'Oscar Health', planType: 'EPO', payerId: 'OSCAR001' },
   ]
 
   for (const plan of insurancePlans) {
@@ -587,6 +603,13 @@ async function main() {
     { code: '71046', description: 'Radiologic examination, chest, 2 views', category: 'Radiology', workRVU: 0.22 },
     { code: '85025', description: 'Blood count; complete (CBC)', category: 'Laboratory', workRVU: 0.00 },
     { code: '80053', description: 'Comprehensive metabolic panel', category: 'Laboratory', workRVU: 0.00 },
+    { code: '99205', description: 'Office/outpatient visit, new patient, high complexity', category: 'E/M', workRVU: 3.50 },
+    { code: '99211', description: 'Office/outpatient visit, est patient, minimal', category: 'E/M', workRVU: 0.18 },
+    { code: '99212', description: 'Office/outpatient visit, est patient, straightforward', category: 'E/M', workRVU: 0.70 },
+    { code: '99396', description: 'Preventive visit, est patient, 40-64 years', category: 'Preventive', workRVU: 1.50 },
+    { code: '99397', description: 'Preventive visit, est patient, 65+ years', category: 'Preventive', workRVU: 1.60 },
+    { code: '36415', description: 'Collection of venous blood by venipuncture', category: 'Laboratory', workRVU: 0.00 },
+    { code: '90471', description: 'Immunization administration', category: 'Immunization', workRVU: 0.17 },
   ]
 
   for (const cpt of cptCodes) {
@@ -1862,6 +1885,160 @@ async function main() {
     },
   })
   console.log('Created MIPS submission')
+
+  // Create Patient Consents (multiple types across patients)
+  await prisma.patientConsent.deleteMany({})
+
+  const consentTypes = [
+    ConsentType.HIPAA_NOTICE,
+    ConsentType.TREATMENT_CONSENT,
+    ConsentType.FINANCIAL_RESPONSIBILITY,
+    ConsentType.TELEHEALTH_CONSENT,
+  ]
+
+  for (let i = 0; i < 20; i++) {
+    const patientId = createdPatients[i % createdPatients.length]
+    for (let j = 0; j < consentTypes.length; j++) {
+      const signedDate = new Date()
+      signedDate.setDate(signedDate.getDate() - Math.floor(Math.random() * 365))
+
+      await prisma.patientConsent.create({
+        data: {
+          patientId,
+          type: consentTypes[j],
+          status: i % 8 === 0 ? 'revoked' : 'signed',
+          signedDate,
+          expiresDate: new Date(signedDate.getTime() + 365 * 24 * 60 * 60 * 1000),
+          ipAddress: `192.168.1.${100 + i}`,
+        },
+      })
+    }
+  }
+  console.log('Created patient consents')
+
+  // Create Prior Authorizations (16 records)
+  await prisma.priorAuthorization.deleteMany({})
+
+  const priorAuthStatuses: PriorAuthStatus[] = [
+    PriorAuthStatus.PENDING, PriorAuthStatus.APPROVED, PriorAuthStatus.APPROVED, PriorAuthStatus.APPROVED,
+    PriorAuthStatus.DENIED, PriorAuthStatus.EXPIRED, PriorAuthStatus.IN_REVIEW, PriorAuthStatus.APPROVED,
+  ]
+  const priorAuthServiceTypes = [
+    'Imaging', 'Imaging', 'Physical Therapy', 'Surgical',
+    'Cardiology', 'Sleep Medicine', 'Gastroenterology', 'Dermatology',
+    'Psychiatry', 'Imaging', 'Neurology', 'Pulmonology',
+    'Surgical', 'Pain Management', 'Surgical', 'Cardiology',
+  ]
+  const priorAuthCptCodes = [
+    ['72148'], ['74177'], ['97110', '97140'], ['29881'],
+    ['93015'], ['95811'], ['45380'], ['99245'],
+    ['90837'], ['73221'], ['95907'], ['94010'],
+    ['27130'], ['64483'], ['99245'], ['93784'],
+  ]
+
+  for (let i = 0; i < 16; i++) {
+    const patientId = createdPatients[i % createdPatients.length]
+    const status = priorAuthStatuses[i % priorAuthStatuses.length]
+    const requestDate = new Date()
+    requestDate.setDate(requestDate.getDate() - (30 + i * 3))
+
+    // Find patient insurance
+    const patientIns = await prisma.patientInsurance.findFirst({
+      where: { patientId },
+    })
+    if (!patientIns) continue
+
+    await prisma.priorAuthorization.create({
+      data: {
+        authNumber: `PA-2024-${String(i + 1).padStart(4, '0')}`,
+        status,
+        requestDate,
+        expirationDate: status === 'APPROVED' ? new Date(requestDate.getTime() + 90 * 24 * 60 * 60 * 1000) : null,
+        serviceType: priorAuthServiceTypes[i],
+        procedureCodes: priorAuthCptCodes[i],
+        diagnosisCodes: [icdCodes[i % icdCodes.length].code],
+        quantity: [1, 1, 12, 1, 1, 1, 1, 1, 6, 1, 1, 1, 1, 3, 1, 1][i],
+        approvedUnits: status === 'APPROVED' ? [1, 1, 12, 1, 1, 1, 1, 1, 6, 1, 1, 1, 1, 3, 1, 1][i] : null,
+        denialReason: status === 'DENIED' ? 'Does not meet medical necessity criteria per payer guidelines' : null,
+        submissionMethod: ['Fax', 'Portal', 'Phone', 'API'][i % 4],
+        submittedAt: requestDate,
+        respondedAt: status !== 'PENDING' ? new Date(requestDate.getTime() + 5 * 24 * 60 * 60 * 1000) : null,
+        notes: `Prior auth for ${priorAuthServiceTypes[i]} services`,
+        patientId,
+        providerId: providers[i % Math.min(providers.length, 5)].id,
+        insuranceId: patientIns.id,
+      },
+    })
+  }
+  console.log('Created prior authorizations')
+
+  // Create Patient Communications (18 records)
+  await prisma.patientCommunication.deleteMany({})
+
+  const commTypes: CommunicationType[] = [
+    CommunicationType.EMAIL, CommunicationType.SMS, CommunicationType.PHONE,
+    CommunicationType.LETTER, CommunicationType.PORTAL_MESSAGE,
+  ]
+  const commSubjects = [
+    'Appointment Reminder', 'Lab Results Available', 'Prescription Ready',
+    'Annual Physical Due', 'Follow-up Needed', 'Insurance Verification',
+    'Balance Notification', 'Referral Update', 'Immunization Reminder',
+    'Telehealth Instructions', 'Pre-Visit Checklist', 'Post-Visit Summary',
+    'New Patient Welcome', 'Recall Notification', 'Test Results Discussion',
+    'Care Plan Update', 'Billing Statement', 'Appointment Confirmation',
+  ]
+
+  for (let i = 0; i < 18; i++) {
+    const patientId = createdPatients[i % createdPatients.length]
+    const commType = commTypes[i % commTypes.length]
+    const sentDate = new Date()
+    sentDate.setDate(sentDate.getDate() - (18 - i) * 2)
+
+    await prisma.patientCommunication.create({
+      data: {
+        patientId,
+        type: commType,
+        direction: i % 4 === 0 ? 'inbound' : 'outbound',
+        subject: commSubjects[i],
+        message: `Dear ${patients[i % patients.length].firstName}, ${commSubjects[i].toLowerCase()} - please contact our office if you have any questions.`,
+        status: i % 6 === 0 ? 'failed' : 'sent',
+        sentAt: sentDate,
+      },
+    })
+  }
+  console.log('Created patient communications')
+
+  // Create Audit Logs (20 records)
+  for (let i = 0; i < 20; i++) {
+    const auditDate = new Date()
+    auditDate.setDate(auditDate.getDate() - i)
+
+    const actions = [
+      'LOGIN', 'READ', 'CREATE', 'UPDATE', 'DELETE', 'EXPORT',
+      'LOGIN', 'READ', 'READ', 'UPDATE', 'CREATE', 'READ',
+      'LOGIN', 'UPDATE', 'READ', 'CREATE', 'READ', 'EXPORT', 'DELETE', 'LOGIN',
+    ]
+    const entities = [
+      'User', 'Patient', 'Patient', 'Appointment', 'Claim', 'AuditLog',
+      'User', 'Encounter', 'Patient', 'Patient', 'Claim', 'Patient',
+      'User', 'Encounter', 'Patient', 'Appointment', 'Claim', 'Patient', 'Appointment', 'User',
+    ]
+
+    await prisma.auditLog.create({
+      data: {
+        userId: users[i % users.length].id,
+        action: actions[i],
+        entity: entities[i],
+        entityId: i < 10 ? createdPatients[i % createdPatients.length] : `entity-${i}`,
+        patientId: entities[i] === 'Patient' ? createdPatients[i % createdPatients.length] : null,
+        ipAddress: `192.168.1.${100 + i}`,
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+        phiAccessed: entities[i] === 'Patient',
+        createdAt: auditDate,
+      },
+    })
+  }
+  console.log('Created audit logs')
 
   console.log('Seed completed successfully!')
 }

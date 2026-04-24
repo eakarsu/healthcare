@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
   TableBody,
@@ -28,6 +30,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
+import { TableSkeleton } from '@/components/ui/loading-skeleton'
+import { useToast } from '@/components/ui/use-toast'
 import {
   Search,
   Plus,
@@ -39,6 +44,9 @@ import {
   User,
   MapPin,
   Shield,
+  Trash2,
+  Edit,
+  RefreshCw,
 } from 'lucide-react'
 import { formatDate, formatPhone, calculateAge, getStatusColor } from '@/lib/utils'
 
@@ -66,6 +74,8 @@ interface Patient {
 }
 
 export default function PatientsPage() {
+  const router = useRouter()
+  const { toast } = useToast()
   const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -73,6 +83,17 @@ export default function PatientsPage() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
+
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false)
+  const [bulkUpdateStatus, setBulkUpdateStatus] = useState('')
+  const [bulkLoading, setBulkLoading] = useState(false)
+
+  // Single delete
+  const [deleteTarget, setDeleteTarget] = useState<Patient | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   useEffect(() => {
     fetchPatients()
@@ -96,6 +117,97 @@ export default function PatientsPage() {
       console.error('Failed to fetch patients:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const toggleSelect = (id: string) => {
+    const next = new Set(selectedIds)
+    if (next.has(id)) {
+      next.delete(id)
+    } else {
+      next.add(id)
+    }
+    setSelectedIds(next)
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === patients.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(patients.map((p) => p.id)))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    setBulkLoading(true)
+    try {
+      const response = await fetch('/api/patients/bulk', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      })
+      const data = await response.json()
+      if (response.ok) {
+        toast({ title: 'Success', description: data.message })
+        setSelectedIds(new Set())
+        fetchPatients()
+      } else {
+        toast({ title: 'Error', description: data.error, variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to delete patients', variant: 'destructive' })
+    } finally {
+      setBulkLoading(false)
+      setBulkDeleteOpen(false)
+    }
+  }
+
+  const handleBulkUpdate = async () => {
+    if (!bulkUpdateStatus) return
+    setBulkLoading(true)
+    try {
+      const response = await fetch('/api/patients/bulk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds), data: { status: bulkUpdateStatus } }),
+      })
+      const data = await response.json()
+      if (response.ok) {
+        toast({ title: 'Success', description: data.message })
+        setSelectedIds(new Set())
+        setBulkUpdateStatus('')
+        fetchPatients()
+      } else {
+        toast({ title: 'Error', description: data.error, variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to update patients', variant: 'destructive' })
+    } finally {
+      setBulkLoading(false)
+      setBulkUpdateOpen(false)
+    }
+  }
+
+  const handleSingleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleteLoading(true)
+    try {
+      const response = await fetch(`/api/patients/${deleteTarget.id}`, {
+        method: 'DELETE',
+      })
+      if (response.ok) {
+        toast({ title: 'Success', description: 'Patient deactivated successfully' })
+        setDeleteTarget(null)
+        setSelectedPatient(null)
+        fetchPatients()
+      } else {
+        const data = await response.json()
+        toast({ title: 'Error', description: data.error, variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to delete patient', variant: 'destructive' })
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -129,25 +241,60 @@ export default function PatientsPage() {
                 }}
               />
             </div>
-            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1) }}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="ACTIVE">Active</SelectItem>
-                <SelectItem value="INACTIVE">Inactive</SelectItem>
-                <SelectItem value="DECEASED">Deceased</SelectItem>
-                <SelectItem value="TRANSFERRED">Transferred</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2">
+              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1) }}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="ACTIVE">Active</SelectItem>
+                  <SelectItem value="INACTIVE">Inactive</SelectItem>
+                  <SelectItem value="DECEASED">Deceased</SelectItem>
+                  <SelectItem value="TRANSFERRED">Transferred</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+
+          {/* Bulk Actions Bar */}
+          {selectedIds.size > 0 && (
+            <div className="mt-4 flex items-center gap-3 rounded-lg bg-teal-50 border border-teal-200 p-3">
+              <span className="text-sm font-medium text-teal-800">
+                {selectedIds.size} patient{selectedIds.size > 1 ? 's' : ''} selected
+              </span>
+              <div className="flex gap-2 ml-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkUpdateOpen(true)}
+                >
+                  <RefreshCw className="mr-1 h-3 w-3" />
+                  Bulk Update
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                  onClick={() => setBulkDeleteOpen(true)}
+                >
+                  <Trash2 className="mr-1 h-3 w-3" />
+                  Bulk Delete
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedIds(new Set())}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex h-64 items-center justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-teal-600 border-t-transparent" />
-            </div>
+            <TableSkeleton rows={8} columns={7} />
           ) : patients.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center text-gray-500">
               <p>No patients found</p>
@@ -160,6 +307,12 @@ export default function PatientsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[40px]">
+                      <Checkbox
+                        checked={selectedIds.size === patients.length && patients.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
                     <TableHead>Patient</TableHead>
                     <TableHead>MRN</TableHead>
                     <TableHead>DOB / Age</TableHead>
@@ -176,13 +329,16 @@ export default function PatientsPage() {
                       className="cursor-pointer hover:bg-gray-50"
                       onClick={() => setSelectedPatient(patient)}
                     >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.has(patient.id)}
+                          onCheckedChange={() => toggleSelect(patient.id)}
+                        />
+                      </TableCell>
                       <TableCell>
-                        <Link
-                          href={`/dashboard/patients/${patient.id}`}
-                          className="font-medium hover:text-teal-600"
-                        >
+                        <span className="font-medium hover:text-teal-600">
                           {patient.lastName}, {patient.firstName}
-                        </Link>
+                        </span>
                         <p className="text-sm text-gray-500 capitalize">
                           {patient.gender.toLowerCase()}
                         </p>
@@ -268,7 +424,7 @@ export default function PatientsPage() {
         </CardContent>
       </Card>
 
-      {/* Patient Detail Dialog */}
+      {/* Patient Detail Dialog with Edit/Delete */}
       <Dialog open={!!selectedPatient} onOpenChange={(open) => !open && setSelectedPatient(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -341,20 +497,93 @@ export default function PatientsPage() {
                 </Badge>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="outline" onClick={() => setSelectedPatient(null)}>
-                  Close
+              <div className="flex justify-between gap-3 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                  onClick={() => setDeleteTarget(selectedPatient)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
                 </Button>
-                <Button className="bg-teal-600 hover:bg-teal-700 active:bg-teal-800" asChild>
-                  <Link href={`/dashboard/patients/${selectedPatient.id}`}>
-                    View Full Chart
-                  </Link>
-                </Button>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push(`/dashboard/patients/${selectedPatient.id}`)}
+                  >
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit
+                  </Button>
+                  <Button className="bg-teal-600 hover:bg-teal-700 active:bg-teal-800" asChild>
+                    <Link href={`/dashboard/patients/${selectedPatient.id}`}>
+                      View Full Chart
+                    </Link>
+                  </Button>
+                </div>
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Delete Confirmation */}
+      <ConfirmationDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title="Delete Selected Patients"
+        description={`Are you sure you want to deactivate ${selectedIds.size} patient${selectedIds.size > 1 ? 's' : ''}? This action will set their status to inactive.`}
+        confirmLabel="Delete All"
+        variant="danger"
+        loading={bulkLoading}
+        onConfirm={handleBulkDelete}
+      />
+
+      {/* Bulk Update Dialog */}
+      <Dialog open={bulkUpdateOpen} onOpenChange={setBulkUpdateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Bulk Update Patients</DialogTitle>
+            <DialogDescription>
+              Update status for {selectedIds.size} selected patient{selectedIds.size > 1 ? 's' : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Select value={bulkUpdateStatus} onValueChange={setBulkUpdateStatus}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select new status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ACTIVE">Active</SelectItem>
+                <SelectItem value="INACTIVE">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setBulkUpdateOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-teal-600 hover:bg-teal-700"
+                onClick={handleBulkUpdate}
+                disabled={!bulkUpdateStatus || bulkLoading}
+              >
+                {bulkLoading ? 'Updating...' : 'Update All'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Single Delete Confirmation */}
+      <ConfirmationDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete Patient"
+        description={`Are you sure you want to deactivate ${deleteTarget?.firstName} ${deleteTarget?.lastName}? This will set their status to inactive.`}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleteLoading}
+        onConfirm={handleSingleDelete}
+      />
     </div>
   )
 }

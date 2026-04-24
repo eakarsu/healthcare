@@ -6,6 +6,7 @@ import { useEffect } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
 import { SessionTimeout } from '@/components/layout/SessionTimeout'
+import { ErrorBoundary } from '@/components/ui/error-boundary'
 
 export default function DashboardLayout({
   children,
@@ -39,7 +40,9 @@ export default function DashboardLayout({
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header />
         <main className="flex-1 overflow-auto p-6">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </main>
       </div>
       <SessionTimeout />

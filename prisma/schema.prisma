@@ -116,6 +116,15 @@ model User {
   twoFactorEnabled Boolean @default(false)
   twoFactorSecret String?
 
+  // Password reset
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+
+  // Email verification
+  emailVerified            Boolean   @default(false)
+  emailVerificationToken   String?
+  emailVerificationExpires DateTime?
+
   // Session management
   lastLogin     DateTime?
   lastActivity  DateTime?
