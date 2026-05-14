@@ -15,7 +15,7 @@ const openai = hasValidApiKey ? new OpenAI({
   },
 }) : null
 
-const MODEL = process.env.OPENROUTER_MODEL || 'anthropic/claude-3-haiku'
+const MODEL = process.env.OPENROUTER_MODEL || 'anthropic/claude-3-5-sonnet-20241022'
 
 // System prompt for chatbot
 const SYSTEM_PROMPT = `You are a helpful healthcare practice assistant. You can help patients with:

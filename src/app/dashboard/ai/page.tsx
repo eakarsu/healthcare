@@ -95,6 +95,22 @@ const aiFeatures = [
     color: 'bg-indigo-100 text-indigo-600',
     features: ['Auto-formatting', 'Clinical summary', 'Fax integration'],
   },
+  {
+    title: 'Ambient Scribe (Live Transcription)',
+    description: 'Stream a clinical encounter audio file or transcript and get a structured SOAP note + ICD-10/CPT codes back.',
+    href: '/ai/ambient-scribe',
+    icon: Mic,
+    color: 'bg-blue-100 text-blue-700',
+    features: ['Deepgram/Whisper transcription', 'Structured SOAP', 'Code suggestions'],
+  },
+  {
+    title: 'HIPAA-Compliant Patient Chat (portal)',
+    description: 'Patient-authenticated chat that pulls FHIR-style record context and audits every turn. Demo at /portal/chat.',
+    href: '/portal/chat',
+    icon: ShieldCheck,
+    color: 'bg-emerald-100 text-emerald-700',
+    features: ['Audit-logged PHI access', 'Patient-context-aware', 'Urgent-symptom triage'],
+  },
 ]
 
 const stats = [

@@ -14,7 +14,7 @@ const openai = hasValidApiKey ? new OpenAI({
   },
 }) : null
 
-const MODEL = process.env.OPENROUTER_MODEL || 'anthropic/claude-3-haiku'
+const MODEL = process.env.OPENROUTER_MODEL || 'anthropic/claude-3-5-sonnet-20241022'
 
 interface DrugInteraction {
   drug1: string

@@ -2423,3 +2423,28 @@ model MIPSSubmission {
 
   @@unique([submissionYear, submissionType])
 }
+
+// ============ AI RESULT LOG ============
+// Persists every AI call (input/output JSONB) for audit, analytics, and
+// retraining. Indexed by feature + user + patient for HIPAA reporting.
+model AIResult {
+  id            String    @id @default(cuid())
+  feature       String    // e.g. ambient-scribe, billing-coder, denial-predictor
+  model         String    // e.g. anthropic/claude-3-5-sonnet-20241022
+  userId        String?
+  practiceId    String?
+  patientId     String?
+  input         Json      // Sanitised inputs sent to the model
+  output        Json      // Parsed model output (or raw text)
+  durationMs    Int?
+  success       Boolean   @default(true)
+  errorMessage  String?
+
+  createdAt     DateTime  @default(now())
+
+  @@index([feature])
+  @@index([userId])
+  @@index([practiceId])
+  @@index([patientId])
+  @@index([createdAt])
+}

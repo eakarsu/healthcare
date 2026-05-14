@@ -13,8 +13,15 @@ const openai = hasValidApiKey ? new OpenAI({
   },
 }) : null
 
-// Use model from environment variable or default
-const MODEL = process.env.OPENROUTER_MODEL || 'anthropic/claude-3-haiku'
+// Use model from environment variable or default to Claude 3.5 Sonnet
+import { AI_MODEL, parseAIJson } from './ai-utils'
+const MODEL = process.env.OPENROUTER_MODEL || AI_MODEL
+
+// Demo-mode flag exposed to callers so the UI can warn clinicians clearly.
+export const DEMO_MODE = !openai
+export function isDemoMode(): boolean {
+  return DEMO_MODE
+}
 
 // Mock SOAP note generator for demo mode
 function generateMockSOAPNote(transcription: string): {
@@ -229,13 +236,15 @@ Return ONLY a JSON object with the following structure:
       throw new Error('Failed to generate SOAP note')
     }
 
-    // Parse JSON from response (handle potential markdown code blocks)
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      throw new Error('Invalid response format')
-    }
-
-    return JSON.parse(jsonMatch[0])
+    const parsed = parseAIJson<{
+      chiefComplaint: string
+      subjective: string
+      objective: string
+      assessment: string
+      plan: string
+    }>(content)
+    if (!parsed) throw new Error('Invalid response format')
+    return parsed
   } catch (error) {
     console.error('OpenRouter API error, falling back to demo mode:', error)
     return generateMockSOAPNote(transcription)
@@ -289,12 +298,12 @@ For CPT, consider E/M level based on complexity of encounter.`,
       throw new Error('Failed to suggest billing codes')
     }
 
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      throw new Error('Invalid response format')
-    }
-
-    return JSON.parse(jsonMatch[0])
+    const parsed = parseAIJson<{
+      icdCodes: Array<{ code: string; description: string; confidence: number }>
+      cptCodes: Array<{ code: string; description: string; confidence: number }>
+    }>(content)
+    if (!parsed) throw new Error('Invalid response format')
+    return parsed
   } catch (error) {
     console.error('OpenRouter API error, falling back to demo mode:', error)
     return generateMockBillingCodes(clinicalNote)
@@ -364,21 +373,70 @@ Place of Service: ${claimDetails.placeOfService || 'Office'}`,
       throw new Error('Failed to predict denial risk')
     }
 
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      throw new Error('Invalid response format')
-    }
-
-    return JSON.parse(jsonMatch[0])
+    const parsed = parseAIJson<{
+      riskScore: number
+      riskLevel: 'LOW' | 'MEDIUM' | 'HIGH'
+      riskFactors: Array<{ factor: string; impact: string; recommendation: string }>
+      overallRecommendation: string
+    }>(content)
+    if (!parsed) throw new Error('Invalid response format')
+    return parsed
   } catch (error) {
     console.error('OpenRouter API error, falling back to demo mode:', error)
     return generateMockDenialRisk(claimDetails)
   }
 }
 
-// Transcribe audio (placeholder for Deepgram integration)
-export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
-  // In a real implementation, this would use Deepgram or similar service
-  // For now, return a placeholder
-  throw new Error('Audio transcription requires Deepgram API integration')
+// Transcribe audio (Deepgram REST integration; Whisper-compatible fallback)
+export async function transcribeAudio(audioBuffer: Buffer, mimeType = 'audio/wav'): Promise<string> {
+  const deepgramKey = process.env.DEEPGRAM_API_KEY
+  const openaiKey = process.env.OPENAI_API_KEY
+
+  // Prefer Deepgram if configured
+  if (deepgramKey) {
+    const resp = await fetch(
+      'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&language=en',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Token ${deepgramKey}`,
+          'Content-Type': mimeType,
+        },
+        body: audioBuffer as unknown as BodyInit,
+      }
+    )
+    if (!resp.ok) {
+      const txt = await resp.text()
+      throw new Error(`Deepgram error: ${resp.status} ${txt}`)
+    }
+    const data = await resp.json()
+    const transcript =
+      data?.results?.channels?.[0]?.alternatives?.[0]?.transcript || ''
+    if (!transcript) throw new Error('Empty transcription from Deepgram')
+    return transcript
+  }
+
+  // Fallback: OpenAI Whisper (multipart upload)
+  if (openaiKey) {
+    const form = new FormData()
+    const blob = new Blob([audioBuffer as unknown as ArrayBuffer], { type: mimeType })
+    form.append('file', blob, 'audio.wav')
+    form.append('model', 'whisper-1')
+    const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${openaiKey}` },
+      body: form as unknown as BodyInit,
+    })
+    if (!resp.ok) {
+      const txt = await resp.text()
+      throw new Error(`Whisper error: ${resp.status} ${txt}`)
+    }
+    const data = await resp.json()
+    if (!data?.text) throw new Error('Empty transcription from Whisper')
+    return data.text as string
+  }
+
+  throw new Error(
+    'Audio transcription requires DEEPGRAM_API_KEY (preferred) or OPENAI_API_KEY for Whisper fallback'
+  )
 }

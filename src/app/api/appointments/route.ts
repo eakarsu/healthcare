@@ -44,37 +44,50 @@ export async function GET(request: NextRequest) {
       where.status = status
     }
 
-    const appointments = await prisma.appointment.findMany({
-      where,
-      include: {
-        patient: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            mrn: true,
-            phone: true,
-          },
-        },
-        provider: {
-          include: {
-            user: {
-              select: { firstName: true, lastName: true },
+    const { page, limit, skip } = getPaginationParams(request)
+
+    const [appointments, total] = await Promise.all([
+      prisma.appointment.findMany({
+        where,
+        include: {
+          patient: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              mrn: true,
+              phone: true,
             },
           },
+          provider: {
+            include: {
+              user: {
+                select: { firstName: true, lastName: true },
+              },
+            },
+          },
+          type: true,
+          location: {
+            select: { id: true, name: true },
+          },
+          room: {
+            select: { id: true, name: true },
+          },
         },
-        type: true,
-        location: {
-          select: { id: true, name: true },
-        },
-        room: {
-          select: { id: true, name: true },
-        },
-      },
-      orderBy: { scheduledStart: 'asc' },
-    })
+        orderBy: { scheduledStart: 'asc' },
+        take: limit,
+        skip,
+      }),
+      prisma.appointment.count({ where }),
+    ])
 
-    return apiResponse({ data: appointments })
+    return apiResponse({
+      data: appointments,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    })
   } catch (error) {
     console.error('Failed to fetch appointments:', error)
     return apiError('Failed to fetch appointments', 500)

@@ -30,6 +30,7 @@ const navigation = [
   { name: 'Dashboard', href: '/portal', icon: Home },
   { name: 'Appointments', href: '/portal/appointments', icon: Calendar },
   { name: 'Messages', href: '/portal/messages', icon: MessageSquare },
+  { name: 'AI Assistant', href: '/portal/chat', icon: Shield },
   { name: 'Medical Records', href: '/portal/records', icon: FileText },
   { name: 'Payments', href: '/portal/payments', icon: CreditCard },
 ]
