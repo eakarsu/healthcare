@@ -93,6 +93,11 @@ const navigation = [
     icon: FolderLock,
   },
   {
+    name: 'Allergy Review',
+    href: '/dashboard/allergy-interaction-review',
+    icon: AlertTriangle,
+  },
+  {
     name: 'Fax',
     href: '/dashboard/fax',
     icon: Phone,
