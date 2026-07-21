@@ -55,6 +55,11 @@ async function generateSimplePDF(title: string, patientName: string, date: Date)
 }
 
 async function main() {
+  if (process.env.DESTRUCTIVE_DEMO_SEED_ACKNOWLEDGEMENT !== 'replace-all-data-with-demo-fixtures') {
+    throw new Error('Refusing destructive demo seed without explicit acknowledgement')
+  }
+  const demoPassword = process.env.DEMO_SEED_PASSWORD || ''
+  if (demoPassword.length < 12) throw new Error('DEMO_SEED_PASSWORD must contain at least 12 characters')
   console.log('Starting seed...')
 
   // Create Practice
@@ -178,7 +183,7 @@ async function main() {
   console.log('Created rooms')
 
   // Create Users
-  const hashedPassword = await bcrypt.hash('password123', 10)
+  const hashedPassword = await bcrypt.hash(demoPassword, 10)
 
   const users = [
     {

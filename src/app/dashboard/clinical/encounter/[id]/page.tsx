@@ -707,8 +707,8 @@ export default function EncounterPage() {
           </Card>
 
           <Button variant="outline" className="w-full" asChild>
-            <Link href="/dashboard/ai/billing-coder">
-              Suggest Billing Codes
+            <Link href="/dashboard/ai/scribe">
+              Open Governed Clinical Draft
             </Link>
           </Button>
         </div>

@@ -74,7 +74,7 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
   // Content Security Policy
   response.headers.set(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:; frame-ancestors 'none';"
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:; frame-ancestors 'none';"
   )
 
   // Prevent clickjacking
@@ -168,9 +168,7 @@ function applyCors(request: NextRequest, response: NextResponse): NextResponse {
   const allowed = getAllowedOrigins()
   let allowOrigin: string | null = null
   if (origin) {
-    if (allowed.length === 0) allowOrigin = '*'
-    else if (allowed.includes('*')) allowOrigin = '*'
-    else if (allowed.includes(origin)) allowOrigin = origin
+    if (allowed.includes(origin)) allowOrigin = origin
   }
   if (allowOrigin) {
     response.headers.set('Access-Control-Allow-Origin', allowOrigin)
@@ -181,7 +179,7 @@ function applyCors(request: NextRequest, response: NextResponse): NextResponse {
     'Access-Control-Allow-Headers',
     'Content-Type, Authorization, X-Requested-With, X-Practice-Id'
   )
-  response.headers.set('Access-Control-Allow-Credentials', 'true')
+  response.headers.set('Access-Control-Allow-Credentials', allowOrigin ? 'true' : 'false')
   response.headers.set('Access-Control-Max-Age', '86400')
   return response
 }
@@ -196,6 +194,22 @@ export function middleware(request: NextRequest) {
     const isApiEndpoint = pathname.startsWith('/api/')
     const isAIEndpoint = pathname.startsWith('/api/ai/')
     const rateLimitKey = getRateLimitKey(request)
+
+    // Only the governed AI scribe journey is supported. Generated gap demos and
+    // unreviewed clinical AI routes must not be exposed as production features.
+    const isGeneratedGapPath = pathname.startsWith('/api/gap-no-')
+      || pathname.startsWith('/dashboard/batch10')
+    const isUngovernedAIPath = (isAIEndpoint && pathname !== '/api/ai/scribe')
+      || (pathname.startsWith('/dashboard/ai/') && pathname !== '/dashboard/ai/scribe')
+
+    if (isGeneratedGapPath || isUngovernedAIPath) {
+      const response = NextResponse.json(
+        { error: 'This workflow is not enabled for production use.' },
+        { status: 404 }
+      )
+      applyCors(request, response)
+      return addSecurityHeaders(response)
+    }
 
     // Handle CORS preflight first
     if (isApiEndpoint && request.method === 'OPTIONS') {

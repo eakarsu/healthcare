@@ -147,58 +147,24 @@ async function sendSuperbillEmail(options: {
     email?: string
   }
 }): Promise<boolean> {
-  // Check if nodemailer is configured
-  const smtpHost = process.env.EMAIL_SMTP_HOST
-  const smtpUser = process.env.EMAIL_SMTP_USER
-
-  if (smtpHost && smtpUser) {
-    try {
-      const nodemailer = await import('nodemailer')
-
-      const transporter = nodemailer.default.createTransport({
-        host: smtpHost,
-        port: parseInt(process.env.EMAIL_SMTP_PORT || '587'),
-        secure: process.env.EMAIL_SMTP_SECURE === 'true',
-        auth: {
-          user: smtpUser,
-          pass: process.env.EMAIL_SMTP_PASS,
-        },
-      })
-
-      await transporter.sendMail({
-        from: options.practice.email || smtpUser,
-        to: options.to,
-        subject: options.subject,
-        html: formatEmailHtml(options.message, options.practice.name),
-        attachments: [
-          {
-            filename: options.attachment.filename,
-            content: options.attachment.content,
-            contentType: 'application/pdf',
-          },
-        ],
-      })
-
-      return true
-    } catch (error) {
-      console.error('Failed to send email via SMTP:', error)
-      return false
-    }
+  const endpoint = process.env.EMAIL_DELIVERY_WEBHOOK_URL
+  const token = process.env.EMAIL_DELIVERY_TOKEN
+  if (!endpoint || !token) return false
+  try {
+    const url = new URL(endpoint)
+    if (url.protocol !== 'https:' || url.hostname !== process.env.EMAIL_DELIVERY_HOST) return false
+    const response = await fetch(url, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: options.to, subject: options.subject, html: formatEmailHtml(options.message, options.practice.name),
+        attachment: { filename: options.attachment.filename, contentType: 'application/pdf', base64: options.attachment.content.toString('base64') },
+      }), signal: AbortSignal.timeout(10_000),
+    })
+    return response.ok
+  } catch (error) {
+    console.error('Approved email delivery provider failed:', error)
+    return false
   }
-
-  // Fallback: Log email details (for development)
-  console.log('Email would be sent (SMTP not configured):')
-  console.log('  To:', options.to)
-  console.log('  Subject:', options.subject)
-  console.log('  Attachment:', options.attachment.filename)
-  console.log('  Message:', options.message)
-
-  // In development, consider this a success
-  if (process.env.NODE_ENV === 'development') {
-    return true
-  }
-
-  return false
 }
 
 /**

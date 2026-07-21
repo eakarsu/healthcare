@@ -318,7 +318,7 @@ export default function DashboardPage() {
         </Card>
         <Card
           className="cursor-pointer transition-all hover:shadow-md hover:border-teal-200"
-          onClick={() => handleCardClick('/dashboard/ai/no-show-predictor')}
+          onClick={() => handleCardClick('/dashboard/schedule')}
         >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">No-Show Rate</CardTitle>

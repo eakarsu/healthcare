@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const entry = await prisma.waitlistEntry.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         patient: {
           select: {
@@ -60,7 +60,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -80,7 +80,7 @@ export async function PUT(
     } = body
 
     const existing = await prisma.waitlistEntry.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         patient: {
           select: { firstName: true, lastName: true },
@@ -102,7 +102,7 @@ export async function PUT(
     if (preferredTimeEnd !== undefined) updateData.preferredTimeEnd = preferredTimeEnd
 
     const entry = await prisma.waitlistEntry.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: updateData,
       include: {
         patient: {
@@ -144,7 +144,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -153,7 +153,7 @@ export async function DELETE(
     }
 
     const existing = await prisma.waitlistEntry.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         patient: {
           select: { firstName: true, lastName: true },
@@ -166,7 +166,7 @@ export async function DELETE(
     }
 
     await prisma.waitlistEntry.delete({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     // Log audit entry
@@ -175,7 +175,7 @@ export async function DELETE(
         userId: session.user.id,
         action: 'DELETE',
         entity: 'WAITLIST',
-        entityId: params.id,
+        entityId: (await params).id,
         changes: {
           patientName: `${existing.patient.firstName} ${existing.patient.lastName}`,
         },

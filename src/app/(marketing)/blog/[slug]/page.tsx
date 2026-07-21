@@ -1554,8 +1554,8 @@ PracticeFlux is designed with physician wellness in mind, featuring AI-powered d
   },
 }
 
-export default function BlogPostPage({ params }: { params: { slug: string } }) {
-  const post = posts[params.slug]
+export default async function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
+  const post = posts[(await params).slug]
 
   if (!post) {
     notFound()

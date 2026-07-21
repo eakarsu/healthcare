@@ -1,50 +1,10 @@
-# Dependencies
-node_modules
-.pnp
-.pnp.js
-
-# Build outputs
-.next
-out
-build
-dist
-
-# Testing
-coverage
-
-# Misc
-.DS_Store
-*.pem
-.env*.local
-
-# Debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# IDE
-.idea
-.vscode
-*.swp
-*.swo
-
-# Git
 .git
-.gitignore
-
-# Docker
-Dockerfile
-docker-compose*.yml
-.dockerignore
-
-# Documentation
-README.md
-docs
-*.md
-
-# Tests
-__tests__
-*.test.ts
-*.test.tsx
-*.spec.ts
-*.spec.tsx
+.github
+.env*
+!.env.example
+node_modules
+.next
+coverage
+uploads
+*.log
+_COMPLETENESS_REVIEW.md

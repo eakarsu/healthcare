@@ -4,13 +4,22 @@ import { apiResponse, apiError } from '@/lib/utils'
 import { prisma } from '@/lib/prisma'
 import {
   patientToFHIR,
-  fhirToPatient,
   conditionToFHIR,
   allergyToFHIR,
   medicationToFHIR,
   vitalsToFHIR,
   FHIRClient
 } from '@/lib/fhir'
+import { hasValidConsent } from '@/lib/clinical-governance'
+import { createAuditLog } from '@/lib/audit'
+
+async function authorizeFHIRPatient(session: { user: { id: string; role: string; practiceId: string } }, patientId: string) {
+  if (!['ADMIN', 'MANAGER', 'PROVIDER', 'NURSE'].includes(session.user.role)) return null
+  const patient = await prisma.patient.findFirst({ where: { id: patientId, practiceId: session.user.practiceId }, include: { consents: true } })
+  if (!patient || !hasValidConsent(patient.consents, 'RELEASE_OF_INFORMATION')) return null
+  await createAuditLog({ userId: session.user.id, action: 'READ', entity: 'FHIRPatient', entityId: patient.id, patientId: patient.id, phiAccessed: true })
+  return patient
+}
 
 // Get FHIR capability statement or resources
 export async function GET(request: NextRequest) {
@@ -19,6 +28,7 @@ export async function GET(request: NextRequest) {
     if (!session) {
       return apiError('Unauthorized', 401)
     }
+    if (!['ADMIN', 'MANAGER', 'PROVIDER', 'NURSE'].includes(session.user.role)) return apiError('Clinical interoperability role required', 403)
 
     const { searchParams } = new URL(request.url)
     const resourceType = searchParams.get('resourceType')
@@ -101,9 +111,7 @@ export async function GET(request: NextRequest) {
     switch (resourceType) {
       case 'Patient': {
         if (patientId) {
-          const patient = await prisma.patient.findUnique({
-            where: { id: patientId }
-          })
+          const patient = await authorizeFHIRPatient(session, patientId)
           if (!patient) {
             return apiError('Patient not found', 404)
           }
@@ -116,6 +124,8 @@ export async function GET(request: NextRequest) {
 
         const patients = await prisma.patient.findMany({
           where: {
+            practiceId: session.user.practiceId,
+            consents: { some: { type: 'RELEASE_OF_INFORMATION', status: 'signed', OR: [{ expiresDate: null }, { expiresDate: { gt: new Date() } }] } },
             ...(name ? {
               OR: [
                 { firstName: { contains: name, mode: 'insensitive' } },
@@ -142,6 +152,7 @@ export async function GET(request: NextRequest) {
         if (!patientId) {
           return apiError('Patient ID required for Observation search', 400)
         }
+        if (!await authorizeFHIRPatient(session, patientId)) return apiError('Patient not found or release consent is not active', 403)
 
         const category = searchParams.get('category')
 
@@ -186,6 +197,7 @@ export async function GET(request: NextRequest) {
         if (!patientId) {
           return apiError('Patient ID required for Condition search', 400)
         }
+        if (!await authorizeFHIRPatient(session, patientId)) return apiError('Patient not found or release consent is not active', 403)
 
         const conditions = await prisma.condition.findMany({
           where: { patientId }
@@ -214,6 +226,7 @@ export async function GET(request: NextRequest) {
         if (!patientId) {
           return apiError('Patient ID required for AllergyIntolerance search', 400)
         }
+        if (!await authorizeFHIRPatient(session, patientId)) return apiError('Patient not found or release consent is not active', 403)
 
         const allergies = await prisma.allergy.findMany({
           where: { patientId }
@@ -242,6 +255,7 @@ export async function GET(request: NextRequest) {
         if (!patientId) {
           return apiError('Patient ID required for MedicationStatement search', 400)
         }
+        if (!await authorizeFHIRPatient(session, patientId)) return apiError('Patient not found or release consent is not active', 403)
 
         const medications = await prisma.medication.findMany({
           where: { patientId }
@@ -284,43 +298,14 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return apiError('Unauthorized', 401)
     }
+    if (!['ADMIN', 'PROVIDER'].includes(session.user.role)) return apiError('FHIR write role required', 403)
 
     const body = await request.json()
     const { resourceType } = body
 
     switch (resourceType) {
       case 'Patient': {
-        const patientData = fhirToPatient(body)
-
-        // Get practice ID from session
-        const user = await prisma.user.findUnique({
-          where: { email: session.user?.email || '' }
-        })
-
-        if (!user) {
-          return apiError('User not found', 404)
-        }
-
-        const patient = await prisma.patient.create({
-          data: {
-            mrn: patientData.mrn || `MRN-${Date.now()}`,
-            firstName: patientData.firstName,
-            lastName: patientData.lastName,
-            middleName: patientData.middleName,
-            dateOfBirth: patientData.dateOfBirth,
-            gender: patientData.gender as 'MALE' | 'FEMALE' | 'OTHER' | 'UNKNOWN',
-            email: patientData.email,
-            phone: patientData.phone,
-            mobile: patientData.mobile,
-            address: patientData.address,
-            city: patientData.city,
-            state: patientData.state,
-            zip: patientData.zip,
-            practiceId: user.practiceId
-          }
-        })
-
-        return apiResponse(patientToFHIR(patient), 201)
+        return apiError('Direct Patient creation is disabled; use governed FHIR Bundle import with identity matching and consent', 409)
       }
 
       default:

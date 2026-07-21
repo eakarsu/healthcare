@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const payments = await prisma.claimPayment.findMany({
-      where: { claimId: params.id },
+      where: { claimId: (await params).id },
       orderBy: { paymentDate: 'desc' },
     })
 
@@ -27,7 +27,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -55,7 +55,7 @@ export async function POST(
     }
 
     const claim = await prisma.claim.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: { patient: true },
     })
 
@@ -66,7 +66,7 @@ export async function POST(
     // Create payment
     const payment = await prisma.claimPayment.create({
       data: {
-        claimId: params.id,
+        claimId: (await params).id,
         paymentDate: new Date(paymentDate),
         amount,
         payerType,
@@ -77,7 +77,7 @@ export async function POST(
 
     // Update claim with payment info
     const totalPaid = await prisma.claimPayment.aggregate({
-      where: { claimId: params.id },
+      where: { claimId: (await params).id },
       _sum: { amount: true },
     })
 
@@ -86,7 +86,7 @@ export async function POST(
     const newStatus = paidSum >= chargesTotal ? 'PAID' : 'PARTIAL'
 
     await prisma.claim.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         paidAmount: totalPaid._sum.amount || 0,
         allowedAmount: allowedAmount ?? claim.allowedAmount,
@@ -105,7 +105,7 @@ export async function POST(
         entity: 'CLAIM_PAYMENT',
         entityId: payment.id,
         changes: {
-          claimId: params.id,
+          claimId: (await params).id,
           claimNumber: claim.claimNumber,
           amount,
           payerType,

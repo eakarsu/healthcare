@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { apiResponse, apiError } from '@/lib/utils'
 import { prisma } from '@/lib/prisma'
-import { encrypt, decrypt } from '@/lib/encryption'
+import { encrypt } from '@/lib/encryption'
 import { FHIRClient } from '@/lib/fhir'
 
 // Get all FHIR connections
@@ -12,12 +12,10 @@ export async function GET(request: NextRequest) {
     if (!session) {
       return apiError('Unauthorized', 401)
     }
-
-    const { searchParams } = new URL(request.url)
-    const practiceId = searchParams.get('practiceId')
+    if (!['ADMIN', 'MANAGER'].includes(session.user.role)) return apiError('Administrative role required', 403)
 
     const connections = await prisma.fHIRConnection.findMany({
-      where: practiceId ? { practiceId } : undefined,
+      where: { practiceId: session.user.practiceId },
       include: {
         syncLogs: {
           orderBy: { createdAt: 'desc' },
@@ -48,10 +46,10 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return apiError('Unauthorized', 401)
     }
+    if (session.user.role !== 'ADMIN') return apiError('Administrator role required', 403)
 
     const body = await request.json()
     const {
-      practiceId,
       name,
       type,
       baseUrl,
@@ -62,9 +60,12 @@ export async function POST(request: NextRequest) {
       syncInterval
     } = body
 
-    if (!practiceId || !name || !baseUrl) {
+    if (!name || !baseUrl) {
       return apiError('Missing required fields', 400)
     }
+    const endpoint = new URL(baseUrl)
+    const allowedHosts = (process.env.FHIR_ALLOWED_HOSTS || '').split(',').map(value => value.trim()).filter(Boolean)
+    if (endpoint.protocol !== 'https:' || !allowedHosts.includes(endpoint.hostname)) return apiError('FHIR endpoint must be HTTPS and present in FHIR_ALLOWED_HOSTS', 400)
 
     // Test connection
     try {
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
       // Create connection
       const connection = await prisma.fHIRConnection.create({
         data: {
-          practiceId,
+          practiceId: session.user.practiceId,
           name,
           type: type || 'EHR',
           baseUrl,

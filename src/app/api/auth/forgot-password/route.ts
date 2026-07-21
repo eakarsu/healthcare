@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { apiResponse, apiError } from '@/lib/utils'
 import crypto from 'crypto'
+import { sendTransactionalEmail } from '@/lib/email-delivery'
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,13 +34,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // In production, send email with reset link
-    // For now, log the token (would use nodemailer in production)
-    const resetUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`
-    console.log(`Password reset link for ${email}: ${resetUrl}`)
-
-    // TODO: Send email using nodemailer
-    // await sendPasswordResetEmail(user.email, resetUrl)
+    const resetUrl = `${process.env.NEXTAUTH_URL}/reset-password?token=${resetToken}`
+    await sendTransactionalEmail(user.email, 'Password reset', `<p>Use this one-time link within one hour: <a href="${resetUrl}">Reset password</a></p>`)
 
     return apiResponse({
       message: 'If an account with that email exists, a password reset link has been sent.',

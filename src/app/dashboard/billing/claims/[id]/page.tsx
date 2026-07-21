@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -101,8 +101,8 @@ interface ClaimDetail {
   payments: ClaimPayment[]
 }
 
-export default function ClaimDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params
+export default function ClaimDetailPage() {
+  const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const { toast } = useToast()
   const [claim, setClaim] = useState<ClaimDetail | null>(null)

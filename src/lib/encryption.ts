@@ -9,8 +9,11 @@ function getEncryptionKey(): Buffer {
   if (!key) {
     throw new Error('ENCRYPTION_KEY is not set in environment variables')
   }
-  // Decode base64 key
-  return Buffer.from(key, 'base64')
+  const decoded = Buffer.from(key, 'base64')
+  if (decoded.length !== 32 || decoded.toString('base64') !== key) {
+    throw new Error('ENCRYPTION_KEY must be exactly 32 random bytes encoded as base64')
+  }
+  return decoded
 }
 
 export function encrypt(text: string): string {

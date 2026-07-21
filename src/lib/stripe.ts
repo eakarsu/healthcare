@@ -1,10 +1,20 @@
 import Stripe from 'stripe'
 
-// Initialize Stripe with API key
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  // @ts-expect-error - Stripe type may be stricter than actual API version support
-  apiVersion: '2024-12-18.acacia',
-})
+let stripeClient: Stripe | null = null
+
+function getStripe(): Stripe {
+  const apiKey = process.env.STRIPE_SECRET_KEY
+  if (!apiKey) {
+    throw new Error('Stripe is not configured')
+  }
+  if (!stripeClient) {
+    stripeClient = new Stripe(apiKey, {
+      // @ts-expect-error - Stripe type may be stricter than actual API version support
+      apiVersion: '2024-12-18.acacia',
+    })
+  }
+  return stripeClient
+}
 
 /**
  * Check if Stripe is properly configured
@@ -24,7 +34,7 @@ export async function createCustomer(params: {
   phone?: string
   metadata?: Record<string, string>
 }) {
-  return stripe.customers.create({
+  return getStripe().customers.create({
     email: params.email,
     name: params.name,
     phone: params.phone,
@@ -42,7 +52,7 @@ export async function getOrCreateCustomer(
   patientId?: string
 ): Promise<Stripe.Customer> {
   // Search for existing customer by email
-  const existingCustomers = await stripe.customers.list({
+  const existingCustomers = await getStripe().customers.list({
     email,
     limit: 1,
   })
@@ -52,7 +62,7 @@ export async function getOrCreateCustomer(
   }
 
   // Create new customer
-  return stripe.customers.create({
+  return getStripe().customers.create({
     email,
     name,
     phone,
@@ -72,14 +82,14 @@ export async function updateCustomer(
     metadata?: Record<string, string>
   }
 ) {
-  return stripe.customers.update(customerId, params)
+  return getStripe().customers.update(customerId, params)
 }
 
 /**
  * Retrieve customer by ID
  */
 export async function getCustomer(customerId: string) {
-  return stripe.customers.retrieve(customerId)
+  return getStripe().customers.retrieve(customerId)
 }
 
 // ============ PAYMENT INTENTS ============
@@ -93,7 +103,7 @@ export async function createPaymentIntent(params: {
   description?: string
   metadata?: Record<string, string>
 }) {
-  return stripe.paymentIntents.create({
+  return getStripe().paymentIntents.create({
     amount: params.amount,
     currency: 'usd',
     customer: params.customerId,
@@ -109,7 +119,7 @@ export async function createPaymentIntent(params: {
  * Retrieve a payment intent
  */
 export async function getPaymentIntent(paymentIntentId: string) {
-  return stripe.paymentIntents.retrieve(paymentIntentId)
+  return getStripe().paymentIntents.retrieve(paymentIntentId)
 }
 
 /**
@@ -119,7 +129,7 @@ export async function confirmPaymentIntent(
   paymentIntentId: string,
   paymentMethodId: string
 ) {
-  return stripe.paymentIntents.confirm(paymentIntentId, {
+  return getStripe().paymentIntents.confirm(paymentIntentId, {
     payment_method: paymentMethodId,
   })
 }
@@ -128,7 +138,7 @@ export async function confirmPaymentIntent(
  * Cancel a payment intent
  */
 export async function cancelPaymentIntent(paymentIntentId: string) {
-  return stripe.paymentIntents.cancel(paymentIntentId)
+  return getStripe().paymentIntents.cancel(paymentIntentId)
 }
 
 // ============ PAYMENT METHODS ============
@@ -137,7 +147,7 @@ export async function cancelPaymentIntent(paymentIntentId: string) {
  * List payment methods for a customer
  */
 export async function listPaymentMethods(customerId: string) {
-  return stripe.paymentMethods.list({
+  return getStripe().paymentMethods.list({
     customer: customerId,
     type: 'card',
   })
@@ -150,7 +160,7 @@ export async function attachPaymentMethod(
   paymentMethodId: string,
   customerId: string
 ) {
-  return stripe.paymentMethods.attach(paymentMethodId, {
+  return getStripe().paymentMethods.attach(paymentMethodId, {
     customer: customerId,
   })
 }
@@ -159,7 +169,7 @@ export async function attachPaymentMethod(
  * Detach a payment method from a customer
  */
 export async function detachPaymentMethod(paymentMethodId: string) {
-  return stripe.paymentMethods.detach(paymentMethodId)
+  return getStripe().paymentMethods.detach(paymentMethodId)
 }
 
 /**
@@ -169,7 +179,7 @@ export async function setDefaultPaymentMethod(
   customerId: string,
   paymentMethodId: string
 ) {
-  return stripe.customers.update(customerId, {
+  return getStripe().customers.update(customerId, {
     invoice_settings: {
       default_payment_method: paymentMethodId,
     },
@@ -182,7 +192,7 @@ export async function setDefaultPaymentMethod(
  * Create a setup intent for saving a card
  */
 export async function createSetupIntent(customerId: string) {
-  return stripe.setupIntents.create({
+  return getStripe().setupIntents.create({
     customer: customerId,
     payment_method_types: ['card'],
   })
@@ -192,7 +202,7 @@ export async function createSetupIntent(customerId: string) {
  * Retrieve a setup intent
  */
 export async function getSetupIntent(setupIntentId: string) {
-  return stripe.setupIntents.retrieve(setupIntentId)
+  return getStripe().setupIntents.retrieve(setupIntentId)
 }
 
 // ============ CHARGE SAVED CARD ============
@@ -207,7 +217,7 @@ export async function chargeCustomer(
   description?: string,
   metadata?: Record<string, string>
 ) {
-  return stripe.paymentIntents.create({
+  return getStripe().paymentIntents.create({
     amount,
     currency: 'usd',
     customer: customerId,
@@ -229,7 +239,7 @@ export async function createRefund(
   amount?: number, // Amount in cents (optional for partial refund)
   reason?: 'duplicate' | 'fraudulent' | 'requested_by_customer'
 ) {
-  return stripe.refunds.create({
+  return getStripe().refunds.create({
     payment_intent: paymentIntentId,
     amount, // If not provided, full refund
     reason,
@@ -240,7 +250,7 @@ export async function createRefund(
  * Retrieve a refund
  */
 export async function getRefund(refundId: string) {
-  return stripe.refunds.retrieve(refundId)
+  return getStripe().refunds.retrieve(refundId)
 }
 
 // ============ WEBHOOKS ============
@@ -253,7 +263,7 @@ export function constructWebhookEvent(
   signature: string,
   webhookSecret: string
 ): Stripe.Event {
-  return stripe.webhooks.constructEvent(payload, signature, webhookSecret)
+  return getStripe().webhooks.constructEvent(payload, signature, webhookSecret)
 }
 
 // ============ INVOICES ============
@@ -266,7 +276,7 @@ export async function createInvoice(
   description?: string,
   metadata?: Record<string, string>
 ) {
-  return stripe.invoices.create({
+  return getStripe().invoices.create({
     customer: customerId,
     description,
     metadata,
@@ -282,7 +292,7 @@ export async function addInvoiceLineItem(
   amount: number, // Amount in cents
   description: string
 ) {
-  return stripe.invoiceItems.create({
+  return getStripe().invoiceItems.create({
     customer: customerId,
     amount,
     currency: 'usd',
@@ -294,14 +304,14 @@ export async function addInvoiceLineItem(
  * Finalize and send an invoice
  */
 export async function finalizeInvoice(invoiceId: string) {
-  return stripe.invoices.finalizeInvoice(invoiceId)
+  return getStripe().invoices.finalizeInvoice(invoiceId)
 }
 
 /**
  * Pay an invoice immediately
  */
 export async function payInvoice(invoiceId: string) {
-  return stripe.invoices.pay(invoiceId)
+  return getStripe().invoices.pay(invoiceId)
 }
 
 /**
@@ -311,7 +321,7 @@ export async function listCustomerInvoices(
   customerId: string,
   limit: number = 10
 ) {
-  return stripe.invoices.list({
+  return getStripe().invoices.list({
     customer: customerId,
     limit,
   })
@@ -327,7 +337,7 @@ export async function createSubscription(
   priceId: string,
   metadata?: Record<string, string>
 ) {
-  return stripe.subscriptions.create({
+  return getStripe().subscriptions.create({
     customer: customerId,
     items: [{ price: priceId }],
     metadata,
@@ -338,14 +348,14 @@ export async function createSubscription(
  * Cancel a subscription
  */
 export async function cancelSubscription(subscriptionId: string) {
-  return stripe.subscriptions.cancel(subscriptionId)
+  return getStripe().subscriptions.cancel(subscriptionId)
 }
 
 /**
  * Get subscription details
  */
 export async function getSubscription(subscriptionId: string) {
-  return stripe.subscriptions.retrieve(subscriptionId)
+  return getStripe().subscriptions.retrieve(subscriptionId)
 }
 
 /**
@@ -361,7 +371,7 @@ export async function updateSubscription(
   const updateParams: Stripe.SubscriptionUpdateParams = {}
 
   if (params.priceId) {
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+    const subscription = await getStripe().subscriptions.retrieve(subscriptionId)
     updateParams.items = [
       {
         id: subscription.items.data[0].id,
@@ -374,7 +384,7 @@ export async function updateSubscription(
     updateParams.metadata = params.metadata
   }
 
-  return stripe.subscriptions.update(subscriptionId, updateParams)
+  return getStripe().subscriptions.update(subscriptionId, updateParams)
 }
 
 // ============ PRODUCTS & PRICES ============
@@ -383,7 +393,7 @@ export async function updateSubscription(
  * Create a product
  */
 export async function createProduct(name: string, description?: string) {
-  return stripe.products.create({
+  return getStripe().products.create({
     name,
     description,
   })
@@ -400,7 +410,7 @@ export async function createPrice(
     interval_count?: number
   }
 ) {
-  return stripe.prices.create({
+  return getStripe().prices.create({
     product: productId,
     unit_amount: unitAmount,
     currency: 'usd',
@@ -414,14 +424,14 @@ export async function createPrice(
  * Get Stripe account balance
  */
 export async function getBalance() {
-  return stripe.balance.retrieve()
+  return getStripe().balance.retrieve()
 }
 
 /**
  * List balance transactions
  */
 export async function listBalanceTransactions(limit: number = 10) {
-  return stripe.balanceTransactions.list({ limit })
+  return getStripe().balanceTransactions.list({ limit })
 }
 
 // ============ HELPER FUNCTIONS ============
@@ -450,4 +460,4 @@ export function formatAmount(cents: number): string {
   }).format(cents / 100)
 }
 
-export { stripe }
+export { getStripe }

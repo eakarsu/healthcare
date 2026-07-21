@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const allergies = await prisma.allergy.findMany({
-      where: { patientId: params.id },
+      where: { patientId: (await params).id },
       orderBy: [
         { severity: 'desc' },
         { allergen: 'asc' },
@@ -30,7 +30,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -56,7 +56,7 @@ export async function POST(
 
     const allergy = await prisma.allergy.create({
       data: {
-        patientId: params.id,
+        patientId: (await params).id,
         allergen,
         severity,
         reaction,
@@ -74,7 +74,7 @@ export async function POST(
         entity: 'ALLERGY',
         entityId: allergy.id,
         changes: {
-          patientId: params.id,
+          patientId: (await params).id,
           allergen,
           severity,
         },
@@ -90,7 +90,7 @@ export async function POST(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -135,7 +135,7 @@ export async function PUT(
         entity: 'ALLERGY',
         entityId: allergyId,
         changes: {
-          patientId: params.id,
+          patientId: (await params).id,
           changes: body,
         },
       },

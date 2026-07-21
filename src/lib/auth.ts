@@ -5,9 +5,7 @@ import AzureADProvider from 'next-auth/providers/azure-ad'
 import bcrypt from 'bcryptjs'
 import { prisma } from './prisma'
 import { createAuditLog } from './audit'
-
-// Demo practice ID - new users will be added to this practice to see demo data
-const DEMO_PRACTICE_ID = 'practice-1'
+import { validateRuntimeConfig } from './runtime-config'
 
 declare module 'next-auth' {
   interface Session {
@@ -144,29 +142,9 @@ export const authOptions: NextAuthOptions = {
           })
 
           if (!dbUser) {
-            // Create new user in demo practice
-            const nameParts = (user.name || 'New User').split(' ')
-            const firstName = nameParts[0] || 'New'
-            const lastName = nameParts.slice(1).join(' ') || 'User'
-
-            dbUser = await prisma.user.create({
-              data: {
-                email,
-                firstName,
-                lastName,
-                password: '', // OAuth users don't have passwords
-                role: 'RECEPTIONIST',
-                practiceId: DEMO_PRACTICE_ID,
-                isActive: true,
-              },
-            })
-
-            await createAuditLog({
-              userId: dbUser.id,
-              action: 'USER_CREATED',
-              entity: 'User',
-              entityId: dbUser.id,
-            })
+            // Accounts are provisioned by an administrator into a specific
+            // practice; identity-provider login never creates a demo tenant user.
+            return false
           }
 
           // Update last login
@@ -242,6 +220,7 @@ export const authOptions: NextAuthOptions = {
 }
 
 export async function getSession() {
+  validateRuntimeConfig()
   return getServerSession(authOptions)
 }
 

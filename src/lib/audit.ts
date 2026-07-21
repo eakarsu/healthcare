@@ -27,8 +27,7 @@ export async function createAuditLog(params: AuditLogParams) {
     phiAccessed = false,
   } = params
 
-  try {
-    await prisma.auditLog.create({
+  await prisma.auditLog.create({
       data: {
         userId,
         action,
@@ -41,10 +40,6 @@ export async function createAuditLog(params: AuditLogParams) {
         phiAccessed,
       },
     })
-  } catch (error) {
-    // Log to console but don't throw - audit logging should not break app
-    console.error('Failed to create audit log:', error)
-  }
 }
 
 // Helper to get changes between old and new data

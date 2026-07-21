@@ -19,7 +19,6 @@ import {
   Building2,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
-import * as XLSX from 'xlsx'
 
 interface ReportConfig {
   id: string
@@ -123,7 +122,7 @@ export default function ReportsPage() {
     }
   }
 
-  const exportToExcel = async () => {
+  const exportToCsv = async () => {
     if (!selectedReport) {
       toast({
         title: 'No report selected',
@@ -153,17 +152,25 @@ export default function ReportsPage() {
         return
       }
 
-      // Create workbook and worksheet
-      const ws = XLSX.utils.json_to_sheet(exportData)
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Report')
+      const columns: string[] = Array.from(new Set<string>(exportData.flatMap((row: Record<string, unknown>) => Object.keys(row))))
+      const safeCell = (value: unknown) => {
+        const raw = value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value)
+        const protectedValue = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw
+        return `"${protectedValue.replace(/"/g, '""')}"`
+      }
+      const csv = [columns.map(safeCell).join(','), ...exportData.map((row: Record<string, unknown>) => columns.map(column => safeCell(row[column])).join(','))].join('\r\n')
 
       // Generate filename with report name and date range
       const reportName = reports.find(r => r.id === selectedReport)?.name || 'Report'
-      const filename = `${reportName.replace(/\s+/g, '_')}_${dateRange.startDate}_to_${dateRange.endDate}.xlsx`
+      const filename = `${reportName.replace(/\s+/g, '_')}_${dateRange.startDate}_to_${dateRange.endDate}.csv`
 
       // Download the file
-      XLSX.writeFile(wb, filename)
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      link.click()
+      URL.revokeObjectURL(url)
 
       toast({
         title: 'Export successful',
@@ -354,7 +361,7 @@ export default function ReportsPage() {
                       </>
                     )}
                   </Button>
-                  <Button variant="outline" onClick={exportToExcel} disabled={exporting}>
+                  <Button variant="outline" onClick={exportToCsv} disabled={exporting}>
                     {exporting ? (
                       <>
                         <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-600 border-t-transparent" />
@@ -363,7 +370,7 @@ export default function ReportsPage() {
                     ) : (
                       <>
                         <Download className="mr-2 h-4 w-4" />
-                        Export to Excel
+                        Export to CSV
                       </>
                     )}
                   </Button>

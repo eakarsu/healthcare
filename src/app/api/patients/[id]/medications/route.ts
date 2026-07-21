@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -16,7 +16,7 @@ export async function GET(
     const searchParams = request.nextUrl.searchParams
     const status = searchParams.get('status')
 
-    const where: Record<string, unknown> = { patientId: params.id }
+    const where: Record<string, unknown> = { patientId: (await params).id }
     if (status) {
       where.status = status
     }
@@ -38,7 +38,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -68,7 +68,7 @@ export async function POST(
 
     const medication = await prisma.medication.create({
       data: {
-        patientId: params.id,
+        patientId: (await params).id,
         name,
         dosage,
         frequency,
@@ -90,7 +90,7 @@ export async function POST(
         entity: 'MEDICATION',
         entityId: medication.id,
         changes: {
-          patientId: params.id,
+          patientId: (await params).id,
           medicationName: name,
           dosage,
           frequency,
@@ -107,7 +107,7 @@ export async function POST(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -154,7 +154,7 @@ export async function PUT(
         entity: 'MEDICATION',
         entityId: medicationId,
         changes: {
-          patientId: params.id,
+          patientId: (await params).id,
           changes: body,
         },
       },

@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -17,7 +17,7 @@ export async function POST(
     const { verifiedInsurance, collectedCopay, copayAmount, notes } = body
 
     const appointment = await prisma.appointment.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         patient: {
           select: {
@@ -54,7 +54,7 @@ export async function POST(
     const checkedInAt = new Date()
 
     const updatedAppointment = await prisma.appointment.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         status: 'CHECKED_IN',
         checkedInAt,
@@ -68,7 +68,7 @@ export async function POST(
         userId: session.user.id,
         action: 'UPDATE',
         entity: 'APPOINTMENT',
-        entityId: params.id,
+        entityId: (await params).id,
         changes: {
           action: 'CHECK_IN',
           patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,

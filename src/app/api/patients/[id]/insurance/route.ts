@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const insurance = await prisma.patientInsurance.findMany({
-      where: { patientId: params.id },
+      where: { patientId: (await params).id },
       include: {
         insurancePlan: {
           select: {
@@ -37,7 +37,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -68,7 +68,7 @@ export async function POST(
 
     const insurance = await prisma.patientInsurance.create({
       data: {
-        patientId: params.id,
+        patientId: (await params).id,
         insurancePlanId,
         subscriberId,
         subscriberName,
@@ -97,7 +97,7 @@ export async function POST(
         entity: 'PATIENT_INSURANCE',
         entityId: insurance.id,
         changes: {
-          patientId: params.id,
+          patientId: (await params).id,
           insurancePlan: insurance.insurancePlan.name,
           subscriberId,
         },

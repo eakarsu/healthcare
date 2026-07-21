@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -25,8 +25,8 @@ export async function GET(
 
     const where: any = {
       OR: [
-        { entityId: params.id },
-        { changes: { path: ['patientId'], equals: params.id } },
+        { entityId: (await params).id },
+        { changes: { path: ['patientId'], equals: (await params).id } },
       ],
     }
 
@@ -55,7 +55,7 @@ export async function GET(
         take: limit,
       }),
       prisma.patient.findUnique({
-        where: { id: params.id },
+        where: { id: (await params).id },
         select: {
           id: true,
           firstName: true,
@@ -75,10 +75,10 @@ export async function GET(
         userId: session.user.id,
         action: 'READ',
         entity: 'AUDIT_LOG',
-        entityId: params.id,
+        entityId: (await params).id,
         changes: {
           action: 'VIEW_PATIENT_ACCESS_LOG',
-          patientId: params.id,
+          patientId: (await params).id,
           patientMRN: patient.mrn,
         },
         phiAccessed: true,

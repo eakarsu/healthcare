@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const consents = await prisma.patientConsent.findMany({
-      where: { patientId: params.id },
+      where: { patientId: (await params).id },
       orderBy: { signedDate: 'desc' },
     })
 
@@ -27,7 +27,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -53,7 +53,7 @@ export async function POST(
 
     const consent = await prisma.patientConsent.create({
       data: {
-        patientId: params.id,
+        patientId: (await params).id,
         type,
         signedDate: signedDate ? new Date(signedDate) : new Date(),
         expiresDate: expiresDate ? new Date(expiresDate) : null,
@@ -71,7 +71,7 @@ export async function POST(
         entity: 'PATIENT_CONSENT',
         entityId: consent.id,
         changes: {
-          patientId: params.id,
+          patientId: (await params).id,
           consentType: type,
           signedDate: consent.signedDate?.toISOString(),
         },
@@ -87,7 +87,7 @@ export async function POST(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -122,7 +122,7 @@ export async function PUT(
         entity: 'PATIENT_CONSENT',
         entityId: consentId,
         changes: {
-          patientId: params.id,
+          patientId: (await params).id,
           changes: body,
         },
       },

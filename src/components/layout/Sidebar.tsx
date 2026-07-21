@@ -113,14 +113,6 @@ const navigation = [
     icon: Brain,
     children: [
       { name: 'Medical Scribe', href: '/dashboard/ai/scribe' },
-      { name: 'Billing Coder', href: '/dashboard/ai/billing-coder' },
-      { name: 'Denial Predictor', href: '/dashboard/ai/denial-predictor' },
-      { name: 'Prior Auth', href: '/dashboard/ai/prior-auth' },
-      { name: 'Risk Stratification', href: '/dashboard/ai/risk-stratification' },
-      { name: 'No-Show Predictor', href: '/dashboard/ai/no-show-predictor' },
-      { name: 'Treatment Recs', href: '/dashboard/ai/treatment-recommendations' },
-      { name: 'Drug Interactions', href: '/dashboard/ai/drug-interactions' },
-      { name: 'Referral Letters', href: '/dashboard/ai/referral-letter' },
     ],
   },
   {

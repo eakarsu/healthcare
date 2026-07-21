@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const diagnoses = await prisma.encounterDiagnosis.findMany({
-      where: { encounterId: params.id },
+      where: { encounterId: (await params).id },
       orderBy: { sequence: 'asc' },
     })
 
@@ -27,7 +27,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -49,7 +49,7 @@ export async function POST(
     let diagnosisSequence = sequence
     if (!diagnosisSequence) {
       const lastDiagnosis = await prisma.encounterDiagnosis.findFirst({
-        where: { encounterId: params.id },
+        where: { encounterId: (await params).id },
         orderBy: { sequence: 'desc' },
       })
       diagnosisSequence = (lastDiagnosis?.sequence || 0) + 1
@@ -57,7 +57,7 @@ export async function POST(
 
     const diagnosis = await prisma.encounterDiagnosis.create({
       data: {
-        encounterId: params.id,
+        encounterId: (await params).id,
         icdCode,
         description,
         sequence: diagnosisSequence,
@@ -73,7 +73,7 @@ export async function POST(
         entity: 'ENCOUNTER_DIAGNOSIS',
         entityId: diagnosis.id,
         changes: {
-          encounterId: params.id,
+          encounterId: (await params).id,
           icdCode,
           description,
         },
@@ -89,7 +89,7 @@ export async function POST(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -115,7 +115,7 @@ export async function DELETE(
         action: 'DELETE',
         entity: 'ENCOUNTER_DIAGNOSIS',
         entityId: diagnosisId,
-        changes: { encounterId: params.id },
+        changes: { encounterId: (await params).id },
       },
     })
 

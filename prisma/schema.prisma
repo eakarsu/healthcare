@@ -1366,10 +1366,17 @@ model FHIRSyncLog {
   requestData     Json?
   responseData    Json?
   errorMessage    String?
+  externalEventId String?
+  payloadHash     String?
+  provenance      Json?
+  reviewStatus    String    @default("completed")
 
   createdAt       DateTime  @default(now())
 
   connection      FHIRConnection @relation(fields: [connectionId], references: [id])
+
+  @@unique([connectionId, externalEventId])
+  @@index([resourceType, resourceId])
 }
 
 model FHIRResourceMapping {

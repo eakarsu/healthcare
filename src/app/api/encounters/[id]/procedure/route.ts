@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const procedures = await prisma.encounterProcedure.findMany({
-      where: { encounterId: params.id },
+      where: { encounterId: (await params).id },
       include: {
         service: {
           select: {
@@ -35,7 +35,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -65,7 +65,7 @@ export async function POST(
 
     const procedure = await prisma.encounterProcedure.create({
       data: {
-        encounterId: params.id,
+        encounterId: (await params).id,
         cptCode,
         description,
         quantity: quantity || 1,
@@ -86,7 +86,7 @@ export async function POST(
         entity: 'ENCOUNTER_PROCEDURE',
         entityId: procedure.id,
         changes: {
-          encounterId: params.id,
+          encounterId: (await params).id,
           cptCode,
           description,
         },
@@ -102,7 +102,7 @@ export async function POST(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -128,7 +128,7 @@ export async function DELETE(
         action: 'DELETE',
         entity: 'ENCOUNTER_PROCEDURE',
         entityId: procedureId,
-        changes: { encounterId: params.id },
+        changes: { encounterId: (await params).id },
       },
     })
 

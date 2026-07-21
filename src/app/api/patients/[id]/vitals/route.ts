@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -19,7 +19,7 @@ export async function GET(
     // Vitals are stored on encounters
     const encounters = await prisma.encounter.findMany({
       where: {
-        patientId: params.id,
+        patientId: (await params).id,
         OR: [
           { bloodPressureSystolic: { not: null } },
           { heartRate: { not: null } },
@@ -68,7 +68,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -118,7 +118,7 @@ export async function POST(
         entity: 'ENCOUNTER_VITALS',
         entityId: encounterId,
         changes: {
-          patientId: params.id,
+          patientId: (await params).id,
           encounterId,
           vitals: {
             bp: bloodPressureSystolic && bloodPressureDiastolic

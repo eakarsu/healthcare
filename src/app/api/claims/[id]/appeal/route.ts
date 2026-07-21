@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -24,7 +24,7 @@ export async function POST(
     }
 
     const claim = await prisma.claim.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: { patient: true },
     })
 
@@ -41,7 +41,7 @@ export async function POST(
 
     // Update claim status to APPEALED and add appeal notes
     const updatedClaim = await prisma.claim.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         status: 'APPEALED',
         notes: `${claim.notes || ''}\n\n--- APPEAL (${new Date().toISOString()}) ---\nReason: ${reason}${notes ? `\nNotes: ${notes}` : ''}`.trim(),
@@ -54,7 +54,7 @@ export async function POST(
         userId: session.user.id,
         action: 'UPDATE',
         entity: 'CLAIM',
-        entityId: params.id,
+        entityId: (await params).id,
         changes: {
           action: 'APPEAL',
           claimNumber: claim.claimNumber,

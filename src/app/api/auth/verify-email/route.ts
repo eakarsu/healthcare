@@ -4,6 +4,7 @@ import { apiResponse, apiError } from '@/lib/utils'
 import { createAuditLog } from '@/lib/audit'
 import { getSession } from '@/lib/auth'
 import crypto from 'crypto'
+import { sendTransactionalEmail } from '@/lib/email-delivery'
 
 // POST - Send verification email
 export async function POST(request: NextRequest) {
@@ -37,11 +38,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    const verifyUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`
-    console.log(`Email verification link for ${user.email}: ${verifyUrl}`)
-
-    // TODO: Send email using nodemailer
-    // await sendVerificationEmail(user.email, verifyUrl)
+    const verifyUrl = `${process.env.NEXTAUTH_URL}/verify-email?token=${verificationToken}`
+    await sendTransactionalEmail(user.email, 'Verify your email', `<p>Use this one-time link within 24 hours: <a href="${verifyUrl}">Verify email</a></p>`)
 
     return apiResponse({ message: 'Verification email has been sent.' })
   } catch (error) {

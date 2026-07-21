@@ -7,7 +7,7 @@ import { encrypt, decrypt } from '@/lib/encryption'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getSession()
@@ -19,7 +19,7 @@ export async function GET(
 
     const patient = await prisma.patient.findFirst({
       where: {
-        id: params.id,
+        id: (await params).id,
         practiceId: session.user.practiceId,
       },
       include: {
@@ -123,7 +123,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getSession()
@@ -137,7 +137,7 @@ export async function PUT(
     // Get current patient data for audit
     const currentPatient = await prisma.patient.findFirst({
       where: {
-        id: params.id,
+        id: (await params).id,
         practiceId: session.user.practiceId,
       },
     })
@@ -162,7 +162,7 @@ export async function PUT(
     delete updateData.createdAt
 
     const patient = await prisma.patient.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: updateData,
     })
 
@@ -191,7 +191,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getSession()
@@ -208,7 +208,7 @@ export async function DELETE(
 
     const patient = await prisma.patient.findFirst({
       where: {
-        id: params.id,
+        id: (await params).id,
         practiceId: session.user.practiceId,
       },
     })
@@ -219,7 +219,7 @@ export async function DELETE(
 
     // Soft delete by updating status
     await prisma.patient.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: { status: 'INACTIVE' },
     })
 
