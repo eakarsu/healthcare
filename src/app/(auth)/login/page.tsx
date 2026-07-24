@@ -67,6 +67,7 @@ function LoginForm() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -139,6 +140,15 @@ function LoginForm() {
           )}
         </div>
 
+        <button
+          type="button"
+          onClick={() => { setValue('email', process.env.NEXT_PUBLIC_DEMO_EMAIL || ''); setValue('password', process.env.NEXT_PUBLIC_DEMO_PASSWORD || ''); }}
+          disabled={!process.env.NEXT_PUBLIC_DEMO_EMAIL || !process.env.NEXT_PUBLIC_DEMO_PASSWORD}
+          aria-label="Auto Fill Demo Credentials"
+          style={{ width: '100%', marginBottom: '12px', padding: '10px 14px', borderRadius: '8px', border: '1px solid currentColor', background: 'transparent', cursor: 'pointer' }}
+        >
+          Auto Fill Demo Credentials
+        </button>
         <Button
           type="submit"
           className="w-full bg-teal-600 hover:bg-teal-700 active:bg-teal-800"
