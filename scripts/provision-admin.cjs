@@ -10,11 +10,27 @@ async function main() {
   const name = String(process.env.PROVISION_ADMIN_NAME || '').trim();
   if (!email.includes('@') || password.length < 12 || !name) throw new Error('Valid PROVISION_ADMIN_* environment is required');
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) { console.log(JSON.stringify({ event: 'initial_admin_exists' })); return; }
+  const [firstName, ...last] = name.split(/\s+/);
+  if (existing) {
+    const user = await prisma.user.update({
+      where: { email },
+      data: {
+        password: await bcrypt.hash(password, 12),
+        firstName,
+        lastName: last.join(' ') || 'Administrator',
+        role: 'ADMIN',
+        isActive: true,
+        emailVerified: true,
+        failedLogins: 0,
+        lockedUntil: null,
+      },
+    });
+    console.log(JSON.stringify({ event: 'runtime_admin_updated', userId: user.id, practiceId: user.practiceId }));
+    return;
+  }
   const practice = await prisma.practice.create({
     data: { name: process.env.PROVISION_COMPANY_NAME || 'Runtime Acceptance Practice', specialty: 'PRIMARY_CARE' },
   });
-  const [firstName, ...last] = name.split(/\s+/);
   const user = await prisma.user.create({
     data: {
       email,

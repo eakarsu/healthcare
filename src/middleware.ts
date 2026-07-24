@@ -195,11 +195,12 @@ export function middleware(request: NextRequest) {
     const isAIEndpoint = pathname.startsWith('/api/ai/')
     const rateLimitKey = getRateLimitKey(request)
 
-    // Only the governed AI scribe journey is supported. Generated gap demos and
-    // unreviewed clinical AI routes must not be exposed as production features.
+    // Only explicitly governed AI journeys are supported. Generated gap demos
+    // and unreviewed clinical AI routes must not be exposed as production features.
     const isGeneratedGapPath = pathname.startsWith('/api/gap-no-')
       || pathname.startsWith('/dashboard/batch10')
-    const isUngovernedAIPath = (isAIEndpoint && pathname !== '/api/ai/scribe')
+    const governedAIPaths = new Set(['/api/ai/scribe', '/api/ai/runtime-readiness'])
+    const isUngovernedAIPath = (isAIEndpoint && !governedAIPaths.has(pathname))
       || (pathname.startsWith('/dashboard/ai/') && pathname !== '/dashboard/ai/scribe')
 
     if (isGeneratedGapPath || isUngovernedAIPath) {
