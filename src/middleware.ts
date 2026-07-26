@@ -191,6 +191,12 @@ export function middleware(request: NextRequest) {
 
     // Determine endpoint type
     const isAuthEndpoint = pathname.startsWith('/api/auth/')
+    // Credential submission needs the stricter brute-force limit. Read-only
+    // session and identity checks are ordinary authenticated API traffic and
+    // must remain usable immediately after login.
+    const isCredentialSubmission = isAuthEndpoint
+      && request.method !== 'GET'
+      && /\/(?:login|callback|signin|register)$/.test(pathname)
     const isApiEndpoint = pathname.startsWith('/api/')
     const isAIEndpoint = pathname.startsWith('/api/ai/')
     const rateLimitKey = getRateLimitKey(request)
@@ -254,9 +260,9 @@ export function middleware(request: NextRequest) {
 
     // Apply rate limiting to API routes
     if (isApiEndpoint) {
-      const maxRequests = isAuthEndpoint ? AUTH_RATE_LIMIT_MAX : RATE_LIMIT_MAX
+      const maxRequests = isCredentialSubmission ? AUTH_RATE_LIMIT_MAX : RATE_LIMIT_MAX
       const { allowed, remaining } = checkRateLimit(
-        `${rateLimitKey}:${isAuthEndpoint ? 'auth' : 'api'}`,
+        `${rateLimitKey}:${isCredentialSubmission ? 'auth-submit' : 'api'}`,
         maxRequests
       )
 
