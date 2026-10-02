@@ -73,14 +73,14 @@ function LoginForm() {
     resolver: zodResolver(loginSchema),
   })
 
-  const onSubmit = async (data: LoginFormData) => {
+  const signInWithCredentials = async (email: string, password: string) => {
     setIsLoading(true)
     setError(null)
 
     try {
       const result = await signIn('credentials', {
-        email: data.email,
-        password: data.password,
+        email,
+        password,
         redirect: false,
       })
 
@@ -95,6 +95,24 @@ function LoginForm() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const onSubmit = async (data: LoginFormData) => {
+    await signInWithCredentials(data.email, data.password)
+  }
+
+  const handleDemoLogin = async () => {
+    const demoEmail = process.env.NEXT_PUBLIC_DEMO_EMAIL
+    const demoPassword = process.env.NEXT_PUBLIC_DEMO_PASSWORD
+
+    if (!demoEmail || !demoPassword) {
+      setError('Demo credentials are not configured')
+      return
+    }
+
+    setValue('email', demoEmail)
+    setValue('password', demoPassword)
+    await signInWithCredentials(demoEmail, demoPassword)
   }
 
   return (
@@ -142,7 +160,7 @@ function LoginForm() {
 
         <button
           type="button"
-          onClick={() => { setValue('email', process.env.NEXT_PUBLIC_DEMO_EMAIL || ''); setValue('password', process.env.NEXT_PUBLIC_DEMO_PASSWORD || ''); }}
+          onClick={handleDemoLogin}
           disabled={!process.env.NEXT_PUBLIC_DEMO_EMAIL || !process.env.NEXT_PUBLIC_DEMO_PASSWORD}
           aria-label="Auto Fill Demo Credentials"
           style={{ width: '100%', marginBottom: '12px', padding: '10px 14px', borderRadius: '8px', border: '1px solid currentColor', background: 'transparent', cursor: 'pointer' }}
